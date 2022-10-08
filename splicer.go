@@ -2,7 +2,6 @@ package logf
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"sync"
 	"unsafe"
@@ -128,13 +127,6 @@ func (l *list) nextArg() (arg any, ok bool) {
 func (l *list) parseAttrs() (ok bool) {
 	l.attrBegin, l.attrEnd = l.i, l.i
 
-	rbegin, rend, ri := l.attrBegin, l.attrEnd, l.i
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("begin %d end %d i%d\n", rbegin, rend, ri)
-		}
-	}()
-
 	for l.i < len(l.args) {
 		switch arg := l.args[l.i].(type) {
 		case string:
@@ -160,13 +152,6 @@ func (l *list) parseAttrs() (ok bool) {
 }
 
 func (l *list) export(r *slog.Record) {
-	rbegin, rend, ri := l.attrBegin, l.attrEnd, len(l.args)
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("begin %d end %d i%d\n", rbegin, rend, ri)
-		}
-	}()
-
 	for i := l.attrBegin; i < l.attrEnd; i++ {
 		r.AddAttrs(l.args[i].(Attr))
 	}

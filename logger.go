@@ -16,7 +16,7 @@ type Logger struct {
 
 func New(options ...Option) Logger {
 	return Logger{
-		h:     newHandler(newConfig(options)),
+		h:     newHandler(options...),
 		level: slog.InfoLevel,
 	}
 }

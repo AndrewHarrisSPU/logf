@@ -162,9 +162,10 @@ func TestSlogterpolate(t *testing.T) {
 		}
 	}
 
-	log.Info("Hi, {Agent}")
+	log.Info("Hi, {Agent}", "files", "X" )
 	want("INFO")
 	want("Hi, Mulder")
+	want("files=X")
 	want("logger_test.go")
 	b.Reset()
 }
