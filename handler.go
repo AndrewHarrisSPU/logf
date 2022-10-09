@@ -9,10 +9,6 @@ import (
 )
 
 type Handler struct {
-	// replacement hack
-	rep 	  func(Attr) Attr
-	repstr 	  *string
-
 	seg       []Attr
 	ref       slog.Leveler
 	enc       slog.Handler
@@ -59,17 +55,9 @@ func newHandler(options ...Option) *Handler {
 
 	// HANDLER PART
 	h := &Handler{
-		repstr:    new(string),
 		seg:       make([]Attr, 0),
 		ref:       cfg.ref,
 		addSource: cfg.addSource,
-	}
-
-	h.rep = func(a Attr) Attr {
-		if a.Key == "msg" {
-			return slog.String( "msg", *h.repstr )
-		}
-		return a
 	}
 
 	if oHandler != nil {
@@ -80,7 +68,6 @@ func newHandler(options ...Option) *Handler {
 		scfg := slog.HandlerOptions{
 			Level:     cfg.ref,
 			AddSource: cfg.addSource,
-			ReplaceAttr: h.rep,
 		}
 
 		switch oSlog.(type) {
@@ -104,7 +91,6 @@ func (h *Handler) With(seg []Attr) slog.Handler {
 
 func (h *Handler) with(seg []Attr) *Handler {
 	return &Handler{
-		repstr:	   h.repstr,
 		seg:       concat(h.seg, seg),
 		ref:       h.ref,
 		enc:       h.enc.With(seg),
@@ -117,10 +103,23 @@ func (h *Handler) Handle(r slog.Record) error {
 	defer s.free()
 
 	s.join(nil, h.seg, nil)
-	s.interpolate(r.Message())	
-	*h.repstr = s.freeze()
+	r.Attrs(func(a Attr) {
+		s.dict[a.Key] = a.Value
+	})
 
-	return h.enc.Handle(r)
+	var depth int
+	if h.addSource {
+		depth = 5
+	}
+
+	s.interpolate(r.Message())
+
+	r2 := slog.NewRecord(r.Time(), r.Level(), s.msg(), depth)
+	r.Attrs(func(a Attr) {
+		r2.AddAttrs(a)
+	})
+
+	return h.enc.Handle(r2)
 }
 
 func (h *Handler) handle(
@@ -131,18 +130,15 @@ func (h *Handler) handle(
 	depth int,
 ) error {
 	s.interpolate(msg)
-
 	if err != nil {
-		s.text.appendError(err)
+		s.appendError(err)
 	}
 
 	if h.addSource {
 		depth += 5
 	}
 
-	*h.repstr = s.freeze()
-
-	r := slog.NewRecord(time.Now(), level, *h.repstr, depth)
+	r := slog.NewRecord(time.Now(), level, s.msg(), depth)
 	s.list.export(&r)
 
 	return h.enc.Handle(r)

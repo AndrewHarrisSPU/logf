@@ -3,6 +3,7 @@ package logf
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"golang.org/x/exp/slog"
 )
@@ -14,6 +15,7 @@ type Logger struct {
 
 // CONSTRUCTION
 
+// Pass options to New, get a Logger!
 func New(options ...Option) Logger {
 	return Logger{
 		h:     newHandler(options...),
@@ -21,6 +23,8 @@ func New(options ...Option) Logger {
 	}
 }
 
+// Level is intended for chaining calls, e.g.:
+// log.Level(INFO+1).Msg("") logs at INFO+1
 func (l Logger) Level(level slog.Leveler) Logger {
 	return Logger{
 		h:     l.h,
@@ -28,15 +32,18 @@ func (l Logger) Level(level slog.Leveler) Logger {
 	}
 }
 
+// With extends the structure held in the Logger.
+// Arguments are munged through Segment.
 func (l Logger) With(args ...any) Logger {
 	return Logger{
-		h:     l.h.with(segment(args)),
+		h:     l.h.with(Segment(args...)),
 		level: l.level,
 	}
 }
 
 // LOGGING METHODS
 
+// Msg logs a message
 func (l Logger) Msg(msg string, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -49,6 +56,7 @@ func (l Logger) Msg(msg string, args ...any) {
 	l.h.handle(s, l.level.Level(), msg, nil, 0)
 }
 
+// Err logs a message with an appended error
 func (l Logger) Err(msg string, err error, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -61,25 +69,61 @@ func (l Logger) Err(msg string, err error, args ...any) {
 	l.h.handle(s, l.level.Level(), msg, err, 0)
 }
 
+// Fmt interpolates like [Logger.Msg] or [Logger.Err].
+// The result is not written to a log, 
 func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
 
 	s.join(nil, l.h.seg, args)
+
 	s.interpolate(msg)
 
-	if err != nil && len(s.text) > 0 {
-		err = fmt.Errorf(string(s.text)+": %w", err)
+	if err != nil && len(msg) > 0 {
+		s.text.appendString(": %w")
+		err = fmt.Errorf(s.msg(), err)
+		msg = err.Error()
 	}
 
-	s.text.appendError(err)
-
-	return string(s.text), err
+	return msg, err
 }
 
 // SEGMENT
 
-func segment(args []any) (seg []Attr) {
+var keyesc *strings.Replacer
+var keyunesc *strings.Replacer
+
+func init() {
+	keyesc = strings.NewReplacer( "{", "\\{", "}", "\\}", ":", "\\:" )
+	keyunesc = strings.NewReplacer( "\\{", "{", "\\}", "}", "\\:", ":" )
+}
+
+func keyEscape(key string) string {
+	if strings.ContainsAny( key, "{}:" ) {
+		return keyesc.Replace(key)
+	}
+	return key
+}
+
+func keyUnescape(key string) string {
+	if	strings.Contains( key, "\\{" ) ||
+		strings.Contains( key, "\\}" ) || 
+		strings.Contains( key, "\\:" ) {
+			return keyunesc.Replace(key)
+	}
+	return key
+}
+
+func NewAttr(key string, value any) Attr {
+	// key = keyEscape(key)
+	return slog.Any(key, value)
+}
+
+// Segment munges arguments to Attrs, returning a slice of attrs 'seg'.
+//   - Pairs of (string, any) result in an Attr, appended to seg.
+//   - Attrs are appended to seg.
+//   - []Attrs, contexts, and logf's Loggers, CtxLoggers, Handlers are flattened and appended seg.
+func Segment(args ...any) (seg []Attr) {
 	for len(args) > 0 {
 		switch arg := args[0].(type) {
 		case string:
@@ -87,7 +131,7 @@ func segment(args []any) (seg []Attr) {
 				seg = append(seg, slog.String(missingKey, arg))
 				return
 			}
-			seg = append(seg, slog.Any(arg, args[1]))
+			seg = append(seg, NewAttr(arg, args[1]))
 			args = args[2:]
 		case Attr:
 			seg = append(seg, arg)

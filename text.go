@@ -21,19 +21,19 @@ type text []byte
 
 // SCAN
 
-func (t *text) scanKey(msg string) (tail string, key []byte, ok bool) {
+func (t *text) scanKey(msg string) (tail string, clip string, ok bool) {
 	var lpos, rpos int
 	if msg, lpos = t.escapeUntil(msg, '{'); lpos < 0 {
-		return "", nil, false
+		return "", "", false
 	}
 
 	if msg, rpos = t.escapeUntil(msg, '}'); rpos < 0 {
 		*t = append((*t)[:lpos], missingRightBracket...)
-		return "", nil, false
+		return "", "", false
 	}
 
-	*t, key = (*t)[:lpos], (*t)[lpos:]
-	return msg, key, true
+	*t, clip = (*t)[:lpos], string( (*t)[lpos:])
+	return msg, clip, true
 }
 
 func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
@@ -54,13 +54,13 @@ func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
 	return "", -1
 }
 
-func splitVerb(clip []byte) (key, verb []byte) {
-	key = clip
-	// keys with a ':' are bad news here.
-	if n := bytes.IndexByte(key, ':'); n >= 0 {
+func splitVerb(clip string) (key, verb string) {
+	if n := bytes.IndexByte( []byte(clip), ':'); n >= 0 {
 		key, verb = clip[:n], clip[n+1:]
+		key = keyEscape(key)
+		return
 	}
-	return
+	return keyEscape(clip), ""
 }
 
 // APPEND
@@ -78,12 +78,12 @@ func (t *text) appendString(s string) {
 	*t = append(*t, s...)
 }
 
-func (t *text) appendArg(arg any, verb []byte) {
+func (t *text) appendArg(arg any, verb string) {
 	v := slog.AnyValue(arg)
 	t.appendValue(v, verb)
 }
 
-func (t *text) appendValue(v slog.Value, verb []byte) {
+func (t *text) appendValue(v slog.Value, verb string) {
 	if len(verb) > 0 {
 		t.appendValueVerb(v, verb)
 	} else {
@@ -91,24 +91,24 @@ func (t *text) appendValue(v slog.Value, verb []byte) {
 	}
 }
 
-func (t *text) appendValueVerb(v slog.Value, verb []byte) {
+func (t *text) appendValueVerb(v slog.Value, verb string) {
 	switch v.Kind() {
 	case slog.StringKind:
-		fmt.Fprintf(t, string(verb), v.String())
+		fmt.Fprintf(t, verb, v.String())
 	case slog.BoolKind:
-		fmt.Fprintf(t, string(verb), v.Bool())
+		fmt.Fprintf(t, verb, v.Bool())
 	case slog.Float64Kind:
-		fmt.Fprintf(t, string(verb), v.Float64())
+		fmt.Fprintf(t, verb, v.Float64())
 	case slog.Int64Kind:
-		fmt.Fprintf(t, string(verb), v.Int64())
+		fmt.Fprintf(t, verb, v.Int64())
 	case slog.Uint64Kind:
-		fmt.Fprintf(t, string(verb), v.Uint64())
+		fmt.Fprintf(t, verb, v.Uint64())
 	case slog.DurationKind:
-		fmt.Fprintf(t, string(verb), v.String())
+		fmt.Fprintf(t, verb, v.String())
 	case slog.TimeKind:
-		*t = v.Time().AppendFormat(*t, string(verb))
+		*t = v.Time().AppendFormat(*t, verb)
 	case slog.AnyKind:
-		fmt.Fprintf(t, string(verb), v.Any())
+		fmt.Fprintf(t, verb, v.Any())
 	default:
 		panic(corruptKind)
 	}

@@ -3,6 +3,7 @@ package logf
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -123,7 +124,7 @@ func (d *diffLogger) With(args ...any) *diffLogger {
 		Using.Source,
 	).Contextual()
 
-	d2.ctx = context.WithValue(d.ctx, segmentKey{}, segment(args))
+	d2.ctx = context.WithValue(d.ctx, segmentKey{}, Segment(args...))
 
 	// slog
 	slogOptions := slog.HandlerOptions{
@@ -134,20 +135,32 @@ func (d *diffLogger) With(args ...any) *diffLogger {
 	return d2
 }
 
-func (d *diffLogger) Diff(t *testing.T, msg string, args ...any) {
-	// buffer writers are non-sync'd ...
+func (d *diffLogger) Diff(t *testing.T, msg string, n int, args ...any) {
+	// because buffer writers are non-sync'd ...
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	level := d.level.Level()
 
-	d.f.Level(level).Msg(msg, args...)
+	imsg := msg
+	for i := 0; i < n; i++ {
+		imsg += " {}"
+	}
+
+	sargs := args
+	smsg := msg
+	for i := 0; i < n; i++ {
+		smsg = smsg + " " + fmt.Sprint(sargs[0])
+		sargs = sargs[1:]
+	}
+
+	d.f.Level(level).Msg(imsg, args...)
 	fstr := stripTime(d.fbuf.String())
 
-	d.c.Level(level).Msg(d.ctx, msg, args...)
+	d.c.Level(level).Msg(d.ctx, imsg, args...)
 	cstr := stripTime(d.cbuf.String())
 
-	d.s.LogDepth(0, level, msg, args...)
+	d.s.LogDepth(0, level, smsg, sargs...)
 	sstr := stripTime(d.sbuf.String())
 
 	if fstr != sstr {

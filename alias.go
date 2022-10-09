@@ -10,10 +10,6 @@ type (
 	Attr = slog.Attr
 )
 
-func NewAttr(key string, value any) Attr {
-	return slog.Any(key, value)
-}
-
 const (
 	DEBUG = slog.DebugLevel
 	INFO  = slog.InfoLevel

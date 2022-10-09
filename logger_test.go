@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +44,16 @@ func TestMalformed(t *testing.T) {
 	// just the second x appears (first consumed by {} in msg)
 	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
 	want(`"msg":"1","x":2`)
+}
+
+func TestEscaping(t *testing.T) {
+	log, want := substringTestLogger(t, Using.JSON)
+
+	log.Msg( `\{+\}` )
+	want( `{+}` )
+
+	log.With( "{}", "x" ).Msg( `{\{\}}` )
+	want( `"msg":"x"` )
 
 	// Needs JSON Handler at the moment
 	log.Err("👩‍🦰", errors.New("🛸"))
@@ -119,32 +130,37 @@ func TestDiff(t *testing.T) {
 	}{
 		"Hi, Mulder",
 		[]any{"Agent", "Scully"},
-		[]any{"files", "X"},
+		[]any{"X"},
 	}
 
 	log := setupDiffLog().With(f.seg...)
 
 	// level testing
-	log.Diff(t, f.msg, f.args...)
+	log.Diff(t, f.msg, 1, f.args...)
 
 	log.ref.Set(ERROR)
-	log.Diff(t, f.msg, f.args...)
+	log.Diff(t, f.msg, 1, f.args...)
 
 	log.ref.Set(DEBUG)
-	log.Diff(t, f.msg, f.args...)
+	log.Diff(t, f.msg, 1, f.args...)
 
 	// in parallel ...
-	n := 100
+	n := 1000
 	wg := new(sync.WaitGroup)
 	wg.Add(n)
 
 	for i := 0; i < n; i++ {
-		glog := log.With("x", i)
+		go func(i int) {
+			glog := log.With("x", i)
 
-		go func() {
-			glog.Diff(t, f.msg, f.args...)
+			args := make([]any, len(f.args))
+			copy(args, f.args)
+			args = append(args, i*2)
+
+			time.Sleep(time.Duration(rand.Intn(5)*10) * time.Millisecond)
+			glog.Diff(t, f.msg, 2, args...)
 			wg.Done()
-		}()
+		}(i)
 	}
 
 	wg.Wait()
@@ -162,7 +178,7 @@ func TestSlogterpolate(t *testing.T) {
 		}
 	}
 
-	log.Info("Hi, {Agent}", "files", "X" )
+	log.Info("Hi, {Agent}", "files", "X")
 	want("INFO")
 	want("Hi, Mulder")
 	want("files=X")

@@ -16,6 +16,7 @@ type CtxLogger struct {
 	level slog.Leveler
 }
 
+// Contextual returns a CtxLogger that is otherwise identical to the Logger
 func (l Logger) Contextual() CtxLogger {
 	return CtxLogger{
 		h:     l.h,
@@ -23,8 +24,7 @@ func (l Logger) Contextual() CtxLogger {
 	}
 }
 
-// Not much different than Logger (maybe it should wrap a Logger?)
-
+// See [Logger.Msg]
 func (l CtxLogger) Msg(ctx context.Context, msg string, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -37,6 +37,7 @@ func (l CtxLogger) Msg(ctx context.Context, msg string, args ...any) {
 	l.h.handle(s, l.level.Level(), msg, nil, 0)
 }
 
+// See [Logger.Err]
 func (l CtxLogger) Err(ctx context.Context, msg string, err error, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -49,22 +50,25 @@ func (l CtxLogger) Err(ctx context.Context, msg string, err error, args ...any) 
 	l.h.handle(s, l.level.Level(), msg, err, 0)
 }
 
+// See [Logger.Fmt]
 func (l CtxLogger) Fmt(ctx context.Context, msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
 
 	s.join(ctx, l.h.seg, args)
+
 	s.interpolate(msg)
 
-	if err != nil && len(s.text) > 0 {
-		err = fmt.Errorf(string(s.text)+": %w", err)
+	if err != nil && len(msg) > 0 {
+		s.text.appendString(": %w")
+		err = fmt.Errorf(s.msg(), err)
+		msg = err.Error()
 	}
 
-	s.text.appendError(err)
-
-	return string(s.text), err
+	return msg, err
 }
 
+// See [Logger.Level]
 func (l CtxLogger) Level(level slog.Leveler) CtxLogger {
 	return CtxLogger{
 		h:     l.h,
@@ -72,9 +76,10 @@ func (l CtxLogger) Level(level slog.Leveler) CtxLogger {
 	}
 }
 
+// See [Logger.With]
 func (l CtxLogger) With(args ...any) CtxLogger {
 	return CtxLogger{
-		h:     l.h.with(segment(args)),
+		h:     l.h.with(Segment(args...)),
 		level: l.level,
 	}
 }

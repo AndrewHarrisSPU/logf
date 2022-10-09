@@ -2,9 +2,8 @@ package logf
 
 import (
 	"context"
-	"reflect"
+	"strings"
 	"sync"
-	"unsafe"
 
 	"golang.org/x/exp/slog"
 )
@@ -16,9 +15,7 @@ type splicer struct {
 }
 
 func newSplicer() *splicer {
-	s := spool.Get().(*splicer)
-
-	return s
+	return spool.Get().(*splicer)
 }
 
 var spool = sync.Pool{
@@ -39,7 +36,6 @@ func (s *splicer) free() {
 	ok = ok && (len(s.dict)+cap(s.list.args)) < maxAttrSize
 
 	if ok {
-		s.text = s.text[:0]
 		s.dict.clear()
 		s.list.clear()
 
@@ -55,17 +51,7 @@ func (s *splicer) join(ctx context.Context, seg []Attr, args []any) {
 	// seg
 	// no list insert, because segment is exported by Handler
 	for _, a := range seg {
-		s.dict[a.Key] = a.Value
-	}
-
-	// ctx
-	if ctx != nil {
-		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
-			for _, a := range as {
-				s.dict[a.Key] = a.Value
-				s.list.insert(a)
-			}
-		}
+		s.dict.insert(a)
 	}
 
 	// args
@@ -74,24 +60,48 @@ func (s *splicer) join(ctx context.Context, seg []Attr, args []any) {
 		s.list.insert(args[0])
 		args = args[1:]
 	}
+
+	// ctx
+	// insert in list to export context segment
+	if ctx != nil {
+		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
+			for _, a := range as {
+				s.dict.insert(a)
+				s.list.insert(a)
+			}
+		}
+	}
 }
 
-func (s *splicer) freeze() (msg string) {
-	return string(s.text)
+// get a message. once.
+func (s *splicer) msg() (msg string) {
+	msg = string(s.text)
+	s.text = s.text[:0]
+	return
 }
 
 // after interpolation, freeze unsafely yields a string containing an interpolated message.
 // It is catastrophically bad to read the string after free has been called.
-func (s *splicer) freezeUnsafe() (msg string) {
-	textHeader := (*reflect.SliceHeader)(unsafe.Pointer(&s.text))
-	msgHeader := (*reflect.StringHeader)(unsafe.Pointer(&msg))
-	msgHeader.Data, msgHeader.Len = textHeader.Data, textHeader.Len
-	return
-}
+// func (s *splicer) freezeUnsafe() (msg string) {
+// 	textHeader := (*reflect.SliceHeader)(unsafe.Pointer(&s.text))
+// 	msgHeader := (*reflect.StringHeader)(unsafe.Pointer(&msg))
+// 	msgHeader.Data, msgHeader.Len = textHeader.Data, textHeader.Len
+// 	return
+// }
 
 // DICT / LIST
 
 type dict map[string]slog.Value
+
+func (d dict) insert(a Attr) {
+	k := a.Key
+	if	strings.Contains(k, "{" ) ||
+	   	strings.Contains(k, "}" ) ||
+	   	strings.Contains(k, ":" ) {
+			k = keyEscape(k)
+	}
+	d[k] = a.Value
+}
 
 func (d dict) clear() {
 	for k := range d {
@@ -171,7 +181,7 @@ func (s *splicer) interpolate(msg string) {
 	s.list.i = 0
 
 	// interpolation loop
-	var clip []byte
+	var clip string
 	var ok bool
 	for {
 		if msg, clip, ok = s.text.scanKey(msg); !ok {
@@ -184,7 +194,7 @@ func (s *splicer) interpolate(msg string) {
 	s.parseAttrs()
 }
 
-func (s *splicer) interpAttr(clip []byte) {
+func (s *splicer) interpAttr(clip string) {
 	key, verb := splitVerb(clip)
 
 	if len(key) == 0 {
@@ -194,7 +204,7 @@ func (s *splicer) interpAttr(clip []byte) {
 	}
 }
 
-func (s *splicer) interpUnkeyed(verb []byte) {
+func (s *splicer) interpUnkeyed(verb string) {
 	arg, ok := s.list.nextArg()
 	if !ok {
 		s.text.appendString(missingArg)
@@ -208,7 +218,7 @@ func (s *splicer) interpUnkeyed(verb []byte) {
 	s.text.appendArg(arg, verb)
 }
 
-func (s *splicer) interpKeyed(key, verb []byte) {
+func (s *splicer) interpKeyed(key, verb string) {
 	switch string(key) {
 	case "time":
 		// s.text.appendTimeNow(verb)

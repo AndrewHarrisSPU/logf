@@ -9,10 +9,9 @@ Structured logging is motivated by machine-parsable logging, and optimizes for m
 Sometimes developers want a simpler API, with formatting.
 
 
-##
-
-- level constants in CAPS: slog.INFO, slog.DEBUG rather than slog.InfoLevel, slog.DebugLevel
-- 
+## Allocation
+-  
+-
 
 
 
