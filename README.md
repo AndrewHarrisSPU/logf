@@ -3,17 +3,9 @@ Structured logging with string interpolation in Go
 
 ## goals
 - Explore `x/exp/slog`
-
-Structured logging is motivated by machine-parsable logging, and optimizes for machine readability.
-
-Sometimes developers want a simpler API, with formatting.
-
-
-## Allocation
--  
--
-
-
+- Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing.
+- Sometimes developers want a simpler API, with formatting. String interpolation is an experiment in sugar. 
+- This isn't zero-allocating. Low allocation is a goal, but there are tradeoffs.
 
 # What is where
 
@@ -29,18 +21,17 @@ Sometimes developers want a simpler API, with formatting.
 |`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
 
-## Goals
-- Exploring the slog package
-- An API that supports string interpolation and formatting on top of structured logging (and not the other way around)
-- A minimal logging API - reducing the line noise and documentation size
-- An API that is optionally configured for more human-readable output
-
 ## Opinions That May be Wrong
 
-- String interpolation is worth an allocation or two.
-- Munging of small collections of information works differently
+Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.
+
+- String interpolation is worth some allocation.
+- Munging of small collections, with `Segment`
+- Rather than many levels, store level in the `Logger`.
 - Contexts store `[]Attr` segments. Contexts are either persistent, and handled with `With`, or transient, and handled by a `CtxLogger`.
 - Configuration uses `Using.X` struct.
+
+## Interpolation
 
 ### Interpolation symbols
 During interpolation, an input message is scanned for interpolation symbols. There are two flavors of these:
@@ -79,6 +70,10 @@ Msg("Hi", "name", "Mulder")
 	-> msg="Hi" name=Mulder
 ```
 
-# Unsolved problems
-- Keys with '{', '}', or ':' cause problems. With some hypothetical language-level f-strings, these might be invalid, as they can't be present in variable names.
+### Escaping
+
+Keys with '{', '}', or ':' cause problems. With some hypothetical language-level f-strings, these might be invalid, as they can't be present in variable 
+names. Currently: pretty open question, trying escaping schemes at the time I'm writing this.
+
+## Problems:
 - When freeing a splicer, map length rather than map capacity is used to determine if the splicer should be returned to the pool. This may not be ideal.

@@ -115,7 +115,6 @@ func keyUnescape(key string) string {
 }
 
 func NewAttr(key string, value any) Attr {
-	// key = keyEscape(key)
 	return slog.Any(key, value)
 }
 
