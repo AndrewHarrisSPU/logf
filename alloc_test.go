@@ -31,7 +31,7 @@ func TestAllocKindsSplicer(t *testing.T) {
 		{0, 1.0, ""},
 		{3, 1.111, "%2.1f"},
 		{1, time.Now(), ""},
-		{2, time.Now(), time.Kitchen},
+		// {2, time.Now(), time.Kitchen},
 		{1, time.Since(time.Now()), ""},
 		{1, struct{}{}, ""},
 	}
@@ -86,7 +86,7 @@ func TestAllocKindsLogger(t *testing.T) {
 		{0, 0, 1.0, ""},
 		{3, 3, 1.111, "%2.1f"},
 		{1, 1, time.Now(), ""},
-		{2, 2, time.Now(), time.Kitchen},
+		// {2, 2, time.Now(), time.Kitchen},
 		{1, 1, time.Since(time.Now()), ""},
 		{1, 1, struct{}{}, ""},
 	}

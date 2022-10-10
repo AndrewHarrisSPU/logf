@@ -42,6 +42,11 @@ func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
 		switch {
 		case esc:
 			esc = false
+			if r == ':' {
+				t.appendString( `\:` )
+				esc = false
+				continue
+			}
 			fallthrough
 		default:
 			t.appendRune(r)
@@ -55,12 +60,32 @@ func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
 }
 
 func splitVerb(clip string) (key, verb string) {
-	if n := bytes.IndexByte( []byte(clip), ':'); n >= 0 {
-		key, verb = clip[:n], clip[n+1:]
-		key = keyEscape(key)
+	// clip = colonEscape(clip)
+	// if n := bytes.LastIndexByte( []byte(clip), ':' ); n >= 0 {
+	// 	return clip[:n], clip[n+1:]
+	// }
+	// return clip, ""
+
+	n := bytes.LastIndexByte( []byte(clip), ':' )
+	if n < 0 {
+		key, verb = clip, "" // keyEscape(clip), ""
 		return
 	}
-	return keyEscape(clip), ""
+
+	if n == 0 {
+		key, verb = "", clip[1:] // keyEscape(clip[1:]), ""
+		// println( "N==0", key, verb)
+		return
+	}
+
+	// last colon escaped -> use clip
+	if clip[n-1] == '\\' {
+		key, verb = clip, ""
+		return
+	}
+
+	key, verb = clip[:n], clip[n+1:]
+	return
 }
 
 // APPEND

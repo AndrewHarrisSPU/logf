@@ -95,10 +95,8 @@ type dict map[string]slog.Value
 
 func (d dict) insert(a Attr) {
 	k := a.Key
-	if	strings.Contains(k, "{" ) ||
-	   	strings.Contains(k, "}" ) ||
-	   	strings.Contains(k, ":" ) {
-			k = keyEscape(k)
+	if strings.Contains(k, ":" ){
+		k = colonEscape(k)
 	}
 	d[k] = a.Value
 }

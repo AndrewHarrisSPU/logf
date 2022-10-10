@@ -90,29 +90,47 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 
 // SEGMENT
 
-var keyesc *strings.Replacer
-var keyunesc *strings.Replacer
+// var keyesc *strings.Replacer
+// var keyunesc *strings.Replacer
+var colesc *strings.Replacer
+// var colunesc *strings.Replacer
 
 func init() {
-	keyesc = strings.NewReplacer( "{", "\\{", "}", "\\}", ":", "\\:" )
-	keyunesc = strings.NewReplacer( "\\{", "{", "\\}", "}", "\\:", ":" )
+	// keyesc = strings.NewReplacer( "{", "\\{", "}", "\\}" )
+	// keyunesc = strings.NewReplacer( "\\{", "{", "\\}", "}" )
+	colesc = strings.NewReplacer( ":", "\\:" )
+	// colunesc = strings.NewReplacer( "\\:", ":" )
 }
 
-func keyEscape(key string) string {
-	if strings.ContainsAny( key, "{}:" ) {
-		return keyesc.Replace(key)
+// func keyEscape(key string) string {
+// 	if strings.ContainsAny( key, "{}:" ) {
+// 		return keyesc.Replace(key)
+// 	}
+// 	return key
+// }
+
+// func keyUnescape(key string) string {
+// 	if	strings.Contains( key, "\\{" ) ||
+// 		strings.Contains( key, "\\}" ) || 
+// 		strings.Contains( key, "\\:" ) {
+// 			return keyunesc.Replace(key)
+// 	}
+// 	return key
+// }
+
+func colonEscape(key string) string {
+	if strings.Contains( key, ":" ){
+		return colesc.Replace(key)
 	}
 	return key
 }
 
-func keyUnescape(key string) string {
-	if	strings.Contains( key, "\\{" ) ||
-		strings.Contains( key, "\\}" ) || 
-		strings.Contains( key, "\\:" ) {
-			return keyunesc.Replace(key)
-	}
-	return key
-}
+// func colonUnescape(clip string) string {
+// 	if strings.Contains( clip, "\\:" ){
+// 		return colunesc.Replace(clip)
+// 	}
+// 	return clip
+// }
 
 func NewAttr(key string, value any) Attr {
 	return slog.Any(key, value)
