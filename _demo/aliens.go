@@ -18,30 +18,26 @@ var beams string = " *~- "
 var width int = len(beams) * 10
 
 func main() {
-	h := spinHandler{start: time.Now()}
+	h := spinHandler{
+		mu:    new(sync.Mutex),
+		start: time.Now(),
+	}
 	log := logf.New(logf.Using.Handler(&h)).With("Scully", "👩‍🦰")
 	ufo := errors.New("🛸")
 
-	done := make(chan struct{})
+	for i := 0; i < width; i++ {
+		lpad := strings.Repeat(space, 10)[:i]
+		rpad := strings.Repeat(beams, 10)[:width-i]
+		progress := (100 * i) / (1.0 * width)
 
-	go func() {
-		for i := 0; i < width; i++ {
-			lpad := strings.Repeat(space, 10)[:i]
-			rpad := strings.Repeat(beams, 10)[:width-i]
-			<-time.NewTimer(60 * time.Millisecond).C
-			log.Err("{}{Scully}{}", ufo, lpad, rpad)
+		<-time.NewTimer(40 * time.Millisecond).C
+		log.Err("{}{Scully}{}", ufo, lpad, rpad)
+
+		if i%10 == 0 {
+			log.Level(logf.INFO+1).Msg("{}: oh no! {Scully} is {}% abducted!", "👦🏻", progress)
 		}
-		done <- struct{}{}
-	}()
+	}
 
-	go func() {
-		for {
-			<-time.NewTimer(400 * time.Millisecond).C
-			log.Level(logf.INFO+1).Msg("{}: oh no! {Scully}!", "👦🏻")
-		}
-	}()
-
-	<-done
 	log.Err("{Scully} was abducted", ufo)
 }
 
@@ -52,7 +48,7 @@ const (
 )
 
 type spinHandler struct {
-	mu            sync.Mutex
+	mu            *sync.Mutex
 	start         time.Time
 	level         slog.Level
 	clearNextLine bool
@@ -99,7 +95,7 @@ func (h *spinHandler) clearLine() {
 	if h.clearNextLine {
 		h.write(xLoad)
 		h.write(xLineClear)
-		h.write(xLoad)
+		// h.write(xLoad)
 		h.clearNextLine = false
 	}
 }
