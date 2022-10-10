@@ -3,7 +3,6 @@ package logf
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"golang.org/x/exp/slog"
 )
@@ -70,7 +69,7 @@ func (l Logger) Err(msg string, err error, args ...any) {
 }
 
 // Fmt interpolates like [Logger.Msg] or [Logger.Err].
-// The result is not written to a log, 
+// The result is not written to a log,
 func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
@@ -89,48 +88,6 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 }
 
 // SEGMENT
-
-// var keyesc *strings.Replacer
-// var keyunesc *strings.Replacer
-var colesc *strings.Replacer
-// var colunesc *strings.Replacer
-
-func init() {
-	// keyesc = strings.NewReplacer( "{", "\\{", "}", "\\}" )
-	// keyunesc = strings.NewReplacer( "\\{", "{", "\\}", "}" )
-	colesc = strings.NewReplacer( ":", "\\:" )
-	// colunesc = strings.NewReplacer( "\\:", ":" )
-}
-
-// func keyEscape(key string) string {
-// 	if strings.ContainsAny( key, "{}:" ) {
-// 		return keyesc.Replace(key)
-// 	}
-// 	return key
-// }
-
-// func keyUnescape(key string) string {
-// 	if	strings.Contains( key, "\\{" ) ||
-// 		strings.Contains( key, "\\}" ) || 
-// 		strings.Contains( key, "\\:" ) {
-// 			return keyunesc.Replace(key)
-// 	}
-// 	return key
-// }
-
-func colonEscape(key string) string {
-	if strings.Contains( key, ":" ){
-		return colesc.Replace(key)
-	}
-	return key
-}
-
-// func colonUnescape(clip string) string {
-// 	if strings.Contains( clip, "\\:" ){
-// 		return colunesc.Replace(clip)
-// 	}
-// 	return clip
-// }
 
 func NewAttr(key string, value any) Attr {
 	return slog.Any(key, value)

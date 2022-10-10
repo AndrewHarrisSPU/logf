@@ -2,7 +2,6 @@ package logf
 
 import (
 	"context"
-	"strings"
 	"sync"
 
 	"golang.org/x/exp/slog"
@@ -94,11 +93,7 @@ func (s *splicer) msg() (msg string) {
 type dict map[string]slog.Value
 
 func (d dict) insert(a Attr) {
-	k := a.Key
-	if strings.Contains(k, ":" ){
-		k = colonEscape(k)
-	}
-	d[k] = a.Value
+	d[a.Key] = a.Value
 }
 
 func (d dict) clear() {

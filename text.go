@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/exp/slog"
@@ -32,7 +33,7 @@ func (t *text) scanKey(msg string) (tail string, clip string, ok bool) {
 		return "", "", false
 	}
 
-	*t, clip = (*t)[:lpos], string( (*t)[lpos:])
+	*t, clip = (*t)[:lpos], string((*t)[lpos:])
 	return msg, clip, true
 }
 
@@ -43,8 +44,7 @@ func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
 		case esc:
 			esc = false
 			if r == ':' {
-				t.appendString( `\:` )
-				esc = false
+				t.appendString(`\:`)
 				continue
 			}
 			fallthrough
@@ -60,32 +60,36 @@ func (t *text) escapeUntil(msg string, sep rune) (tail string, n int) {
 }
 
 func splitVerb(clip string) (key, verb string) {
-	// clip = colonEscape(clip)
-	// if n := bytes.LastIndexByte( []byte(clip), ':' ); n >= 0 {
-	// 	return clip[:n], clip[n+1:]
-	// }
-	// return clip, ""
+	n := bytes.LastIndexByte([]byte(clip), ':')
 
-	n := bytes.LastIndexByte( []byte(clip), ':' )
+	// no colon found
 	if n < 0 {
-		key, verb = clip, "" // keyEscape(clip), ""
-		return
-	}
-
-	if n == 0 {
-		key, verb = "", clip[1:] // keyEscape(clip[1:]), ""
-		// println( "N==0", key, verb)
-		return
-	}
-
-	// last colon escaped -> use clip
-	if clip[n-1] == '\\' {
 		key, verb = clip, ""
 		return
 	}
 
-	key, verb = clip[:n], clip[n+1:]
+	// colon in 0-pos can't be escaped.
+	// interpret entire clip as emtpy key, colon as formatting token, rest of clip as verb
+	if n == 0 {
+		key, verb = "", clip[1:]
+		return
+	}
+
+	// if colon is found, but prior rune is '\'
+	// interpret entire clip as key string
+	if clip[n-1] == '\\' {
+		key, verb = colonUnescape(clip), ""
+		return
+	}
+
+	// unescaped colon means colon is formatting token
+	// clip before n is key, clip after n is verb
+	key, verb = colonUnescape(clip[:n]), clip[n+1:]
 	return
+}
+
+func colonUnescape(s string) string {
+	return strings.ReplaceAll(s, `\:`, `:`)
 }
 
 // APPEND

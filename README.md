@@ -1,13 +1,13 @@
 # logf
 Structured logging with string interpolation in Go
 
-## goals
+## Goals
 - Explore `x/exp/slog`
 - Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing.
 - Sometimes developers want a simpler API, with formatting. String interpolation is an experiment in sugar. 
 - This isn't zero-allocating. Low allocation is a goal, but there are tradeoffs.
 
-# What is where
+## What's where
 
 | file | stuff |
 | -- | -- |
@@ -57,8 +57,10 @@ log.Msg("{}, {}", 0, 1)
 If an unkeyed interpolation sees an Attr, the Attr is exported. It is not added to the interpolation dictionary, however.
 ```
 exported := slog.Bool( "exported", true)
+
 log.Msg("{}", exported)
 	-> msg="true" exported=true
+
 log.Msg("{} {exported}", exported)
 	-> msg="true !missing-key" exported=true
 ```
@@ -66,14 +68,26 @@ log.Msg("{} {exported}", exported)
 ### Keyed arguments
 Any arguments present after exhausting unkeyed interpolations are converted as key-value pairs.
 ```
-Msg("Hi", "name", "Mulder")
+log.Msg("Hi", "name", "Mulder")
 	-> msg="Hi" name=Mulder
 ```
 
 ### Escaping
 
-Keys with '{', '}', or ':' cause problems. With some hypothetical language-level f-strings, these might be invalid, as they can't be present in variable 
-names. Currently: pretty open question, trying escaping schemes at the time I'm writing this.
+Because '{', '}', and ':' are used as interpolation tokens, they may need to be escaped in messages passed to logging calls.
+A '\' reads as an escape, but will itself need to be escaped in double-quoted strings.
+
+```
+log.Msg( "About that struct\\{\\}..." )
+	-> msg="About that struct{}...""
+
+log.With(":color", "mauve" ).Msg("The color is {\\:color}.")
+	-> msg="The color is mauve."
+
+// Backquotes might be cleaner
+Log.With( "x:y ratio", 2 ).Msg( `What a funny ratio: {x\:y ratio}!` )
+	-> msg="What a funny ratio: 2!"
+```
 
 ## Problems:
 - When freeing a splicer, map length rather than map capacity is used to determine if the splicer should be returned to the pool. This may not be ideal.

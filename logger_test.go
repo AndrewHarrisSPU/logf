@@ -49,29 +49,38 @@ func TestMalformed(t *testing.T) {
 func TestEscaping(t *testing.T) {
 	log, want := substringTestLogger(t, Using.JSON)
 
-	log.Msg( `\{+\}` )
-	want( `"msg":"{+}"` )
+	log.Msg(`\{+\}`)
+	want(`"msg":"{+}"`)
 
 	log.Msg(":")
-	want( `"msg":":"` )
+	want(`"msg":":"`)
 
-	log.Msg("{:}", "foo" )
-	want( `"msg":"foo"` )
+	log.Msg("{:}", "foo")
+	want(`"msg":"foo"`)
 
-	log.With( "{}", "x" ).Msg( `{\{\}}` )
-	want( `"msg":"x"` )
+	log.With("{}", "x").Msg(`{\{\}}`)
+	want(`"msg":"x"`)
 
-	log.With("alpha", "x").Msg( "{alpha:%3s}" )
-	want( `"msg":"  x"` )
+	log.With("alpha", "x").Msg("{alpha:%3s}")
+	want(`"msg":"  x"`)
 
-	log.With( "{}", "x" ).Msg( `{\{\}:%3s}` )
-	want( `"msg":"  x"` )
+	log.With("{}", "x").Msg(`{\{\}:%3s}`)
+	want(`"msg":"  x"`)
 
-	log.Msg( "{:%3s}", "x" )
-	want( `"msg":"  x"` )
+	log.Msg("{:%3s}", "x")
+	want(`"msg":"  x"`)
 
-	log.With( `:attr`, "common-lisp" ).Msg( `{\:attr}` )
-	want( `"msg":"common-lisp"` )
+	log.With(`:attr`, "common-lisp").Msg(`{\:attr}`)
+	want(`"msg":"common-lisp"`)
+
+	log.Msg("About that struct\\{\\}...")
+	want(`"msg":"About that struct{}..."`)
+
+	log.With(":color", "mauve").Msg("The color is {\\:color}.")
+	want(`"msg":"The color is mauve."`)
+
+	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
+	want(`"msg":"What a funny ratio: 2!"`)
 
 	// Needs JSON Handler at the moment
 	log.Err("👩‍🦰", errors.New("🛸"))
