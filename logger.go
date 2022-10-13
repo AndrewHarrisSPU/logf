@@ -3,6 +3,7 @@ package logf
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"golang.org/x/exp/slog"
 )
@@ -17,7 +18,7 @@ type Logger struct {
 // Pass options to New, get a Logger!
 func New(options ...Option) Logger {
 	return Logger{
-		h:     newHandler(options...),
+		h:     NewHandler(options...),
 		level: slog.InfoLevel,
 	}
 }
@@ -40,6 +41,13 @@ func (l Logger) With(args ...any) Logger {
 	}
 }
 
+func (l Logger) WithScope(name string) Logger {
+	return Logger{
+		h:     l.h.withScope(name),
+		level: l.level,
+	}
+}
+
 // LOGGING METHODS
 
 // Msg logs a message
@@ -51,7 +59,8 @@ func (l Logger) Msg(msg string, args ...any) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 	l.h.handle(s, l.level.Level(), msg, nil, 0)
 }
 
@@ -64,7 +73,8 @@ func (l Logger) Err(msg string, err error, args ...any) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 	l.h.handle(s, l.level.Level(), msg, err, 0)
 }
 
@@ -74,7 +84,8 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 
 	s.interpolate(msg)
 
@@ -85,6 +96,17 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	}
 
 	return msg, err
+}
+
+func Print(msg string, args ...any) {
+	s := newSplicer()
+	defer s.free()
+
+	args = s.scan(msg, args)
+	s.join(nil, nil, args)
+	s.interpolate(msg)
+
+	os.Stdout.WriteString(s.msg() + "\n")
 }
 
 // SEGMENT
@@ -102,7 +124,7 @@ func Segment(args ...any) (seg []Attr) {
 		switch arg := args[0].(type) {
 		case string:
 			if len(args) == 1 {
-				seg = append(seg, slog.String(missingKey, arg))
+				seg = append(seg, slog.String(arg, missingArg))
 				return
 			}
 			seg = append(seg, NewAttr(arg, args[1]))
@@ -133,4 +155,19 @@ func Segment(args ...any) (seg []Attr) {
 		}
 	}
 	return
+}
+
+func scopeSegment(prefix string, seg []Attr) []Attr {
+	if prefix == "" {
+		return seg
+	}
+
+	pseg := make([]Attr, 0, len(seg))
+	for _, a := range seg {
+		pseg = append(pseg, Attr{
+			Key:   prefix + a.Key,
+			Value: a.Value,
+		})
+	}
+	return pseg
 }

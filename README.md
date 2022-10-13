@@ -21,6 +21,11 @@ Structured logging with string interpolation in Go
 |`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
 
+## TODO
+- Benchmarking - time and allocations are possible, but are there other useful metrics?
+   Size of pool (how big is a splicer relative to just a byte buffer?)
+- What about {time}, {level}, {source} interpolation keys? Anything?
+
 ## Opinions That May be Wrong
 
 Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.
@@ -42,6 +47,12 @@ Both flavors may accomodate a formatting verb, e.g:
 ```
 {:%s} - unkeyed, formatted as a string
 {pi:%3.2f} - keyed, formatting the interpolated value as a float as with `fmt` package
+```
+
+Group values may be interpolated, but no formatting applies. They 
+
+```
+[k2:v1,k2:v2]
 ```
 
 ### Unkeyed arguments
@@ -75,7 +86,7 @@ log.Msg("Hi", "name", "Mulder")
 ### Escaping
 
 Because '{', '}', and ':' are used as interpolation tokens, they may need to be escaped in messages passed to logging calls.
-A '\' reads as an escape, but will itself need to be escaped in double-quoted strings.
+A '\\' reads as an escape, but will itself need to be escaped in double-quoted strings.
 
 ```
 log.Msg( "About that struct\\{\\}..." )

@@ -68,6 +68,22 @@ func (m *minimal) With(seg []Attr) slog.Handler {
 	}
 }
 
+// TODO
+func (m *minimal) WithScope(name string) slog.Handler {
+	return &minimal{
+		w:   m.w,
+		mu:  m.mu,
+		seg: m.seg,
+
+		layout:    m.layout,
+		start:     m.start,
+		zeroTime:  m.zeroTime,
+		elapsed:   m.elapsed,
+		export:    m.export,
+		addSource: m.addSource,
+	}
+}
+
 func (m *minimal) Handle(r slog.Record) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

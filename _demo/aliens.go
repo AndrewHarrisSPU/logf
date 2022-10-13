@@ -28,12 +28,12 @@ func main() {
 	for i := 0; i < width; i++ {
 		lpad := strings.Repeat(space, 10)[:i]
 		rpad := strings.Repeat(beams, 10)[:width-i]
-		progress := (100 * i) / (1.0 * width)
+		progress := (100.0 * i) / (1.0 * width)
 
 		<-time.NewTimer(40 * time.Millisecond).C
 		log.Err("{}{Scully}{}", ufo, lpad, rpad)
 
-		if i%10 == 0 {
+		if i%13 == 1 {
 			log.Level(logf.INFO+1).Msg("{}: oh no! {Scully} is {}% abducted!", "👦🏻", progress)
 		}
 	}

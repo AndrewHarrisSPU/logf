@@ -2,6 +2,7 @@ package logf
 
 import (
 	"fmt"
+	"golang.org/x/exp/slog"
 	"io"
 	"testing"
 	"time"
@@ -22,16 +23,16 @@ func TestAllocKindsSplicer(t *testing.T) {
 		verb  string
 	}{
 		{1, "string", ""},
-		{3, "string", "%10s"},
+		{1, "string", "%10s"},
 		{1, true, ""},
-		{2, true, "%-6v"},
-		{0, 1, ""},
-		{3, -1, "%+8d"},
-		{0, uint64(1), ""},
-		{0, 1.0, ""},
-		{3, 1.111, "%2.1f"},
+		{1, true, "%-6v"},
+		{1, 1, ""},
+		{1, -1, "%+8d"},
+		{1, uint64(1), ""},
+		{1, 1.0, ""},
+		{1, 1.111, "%2.1f"},
 		{1, time.Now(), ""},
-		// {2, time.Now(), time.Kitchen},
+		{1, time.Now(), time.Kitchen},
 		{1, time.Since(time.Now()), ""},
 		{1, struct{}{}, ""},
 	}
@@ -46,7 +47,7 @@ func TestAllocKindsSplicer(t *testing.T) {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run(label, func(t *testing.T) {
 			// plus one for safe freezing
-			wantAllocs(t, f.alloc, fns[i])
+			wantAllocs(t, f.alloc+1, fns[i])
 		})
 	}
 }
@@ -71,24 +72,39 @@ func allocSplicerFunc(arg any, verb string) func() {
 
 func TestAllocKindsLogger(t *testing.T) {
 	fs := []struct {
-		alloc    int
-		fmtAlloc int
-		arg      any
-		verb     string
+		argAlloc  int
+		withAlloc int
+		fmtAlloc  int
+		arg       any
+		verb      string
 	}{
-		{1, 1, "string", ""},
-		{3, 3, "string", "%10s"},
-		{1, 1, true, ""},
-		{2, 2, true, "%-6v"},
-		{0, 0, 1, ""},
-		{3, 3, -1, "%+8d"},
-		{0, 0, uint64(1), ""},
-		{0, 0, 1.0, ""},
-		{3, 3, 1.111, "%2.1f"},
-		{1, 1, time.Now(), ""},
-		// {2, 2, time.Now(), time.Kitchen},
-		{1, 1, time.Since(time.Now()), ""},
-		{1, 1, struct{}{}, ""},
+		// strings
+		{0, 1, 1, "string", ""},
+		{2, 2, 2, "string", "%10s"},
+
+		// numeric
+		{1, 1, 1, true, ""},
+		{1, 1, 1, true, "%-6v"},
+		{0, 0, 0, 1, ""},
+		{2, 2, 2, -1, "%+8d"},
+		{0, 0, 0, uint64(1), ""},
+		{0, 0, 0, 1.0, ""},
+		{2, 2, 2, 1.111, "%2.1f"},
+
+		// time
+		{1, 1, 1, time.Now(), ""},
+		{2, 2, 2, time.Now(), time.Kitchen},
+		{1, 1, 1, time.Since(time.Now()), ""},
+		{1, 1, 1, struct{}{}, ""},
+
+		// group
+		{1, 1, 1, slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), ""},
+
+		// LogValuer
+		{1, 1, 1, spoof0{}, ""},
+		{2, 2, 2, spoof0{}, "%10s"},
+		{1, 1, 1, spoof2{}, ""},
+		{2, 2, 2, spoof2{}, "%10s"},
 	}
 
 	log := setupDiscardLog()
@@ -106,13 +122,13 @@ func TestAllocKindsLogger(t *testing.T) {
 	for i, f := range fs {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run("arg "+label, func(t *testing.T) {
-			wantAllocs(t, f.alloc, argFns[i])
+			wantAllocs(t, f.argAlloc+1, argFns[i])
 		})
 		t.Run("with "+label, func(t *testing.T) {
-			wantAllocs(t, f.alloc, withFns[i])
+			wantAllocs(t, f.withAlloc+1, withFns[i])
 		})
 		t.Run("fmt "+label, func(t *testing.T) {
-			wantAllocs(t, f.fmtAlloc, fmtFns[i])
+			wantAllocs(t, f.fmtAlloc+1, fmtFns[i])
 		})
 	}
 }

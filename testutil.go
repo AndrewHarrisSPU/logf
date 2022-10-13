@@ -51,6 +51,11 @@ func (d *discardSink) With(as []Attr) slog.Handler {
 	return &discardSink{concat(d.as, as)}
 }
 
+// TODO
+func (d *discardSink) WithScope(string) slog.Handler {
+	return d
+}
+
 // DIFF
 
 func setupDiffLog() *diffLogger {

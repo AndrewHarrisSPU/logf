@@ -21,11 +21,12 @@ func TestMalformed(t *testing.T) {
 	want(missingArg)
 
 	log.Msg("{item}")
-	want(missingKey)
+	want(missingAttr)
 
 	log.Msg("{something")
 	want(missingRightBracket)
 
+	// only string in args - not enough for an Attr
 	log.Msg("no interpolation", "not-a-key")
 	want(missingArg)
 
@@ -33,13 +34,10 @@ func TestMalformed(t *testing.T) {
 	log.Msg("no interpolation", 0)
 	want(missingKey)
 
-	// can't interpolate from arg segment
-	log.Msg("{x}", slog.Int("x", 1))
-	want(missingKey)
-
 	// both bools appear (no deduplication)
-	log.With("bool", true).Msg("{bool}", slog.Bool("bool", false))
-	want(`"msg":"true","bool":true,"bool":false`)
+	// also: second bool wins for interpolation
+	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
+	want(`"msg":"false","bit":true,"bit":false`)
 
 	// just the second x appears (first consumed by {} in msg)
 	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
@@ -57,6 +55,9 @@ func TestEscaping(t *testing.T) {
 
 	log.Msg("{:}", "foo")
 	want(`"msg":"foo"`)
+
+	log.Msg(`file\.txt`)
+	want(`"msg":"file.txt"`)
 
 	log.With("{}", "x").Msg(`{\{\}}`)
 	want(`"msg":"x"`)
@@ -82,6 +83,10 @@ func TestEscaping(t *testing.T) {
 	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
 	want(`"msg":"What a funny ratio: 2!"`)
 
+	// There is an extra slash introduced by JSON escaping
+	log.Msg(`\{\\`)
+	want(`"msg":"{\\"`)
+
 	// Needs JSON Handler at the moment
 	log.Err("👩‍🦰", errors.New("🛸"))
 	want("👩‍🦰")
@@ -105,6 +110,63 @@ func TestLoggerErr(t *testing.T) {
 	if ok := errors.Is(err, reason); !ok {
 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
 	}
+}
+
+func TestGroup(t *testing.T) {
+	log, want := substringTestLogger(t)
+
+	// one group
+	mulder := slog.Group("1", slog.String("first", "Fox"), slog.String("last", "Mulder"))
+	log.Msg("Hi, {1.first} {1.last}", mulder)
+	want("Hi, Fox Mulder")
+
+	// two groups
+	scully := slog.Group("2", slog.String("first", "Dana"), slog.String("last", "Scully"))
+	agents := slog.Group("agents", mulder, scully)
+	log.Msg("Hi, {agents.1.last} and {agents.2.last}", agents)
+	want("Hi, Mulder and Scully")
+
+	// raw
+	log.Msg("{}", agents)
+	want("msg=[1:[first:Fox,last:Mulder],2:[first:Dana,last:Scully]]")
+}
+
+func TestScope(t *testing.T) {
+	log, want := substringTestLogger(t)
+
+	// one scope
+	mulder := log.WithScope("agent").With("first", "Fox", "last", "Mulder")
+	mulder.Msg("Hi, {agent.last}")
+	want("Hi, Mulder")
+
+	// another scope
+	files := log.WithScope("files").With("x", true)
+	files.Msg("{files.x}")
+	want("msg=true")
+
+	// two scopes
+	log = log.WithScope("x").WithScope("agent").With("last", "Scully")
+	log.Msg("Hi, {x.agent.last}")
+	want("Hi, Scully")
+}
+
+// spoofy types to test LogValuer
+type (
+	spoof0 struct{}
+	spoof1 struct{}
+	spoof2 struct{}
+)
+
+func (s spoof0) LogValue() slog.Value {
+	return slog.StringValue("spoof")
+}
+
+func (s spoof1) LogValue() slog.Value {
+	return slog.AnyValue(spoof0{})
+}
+
+func (s spoof2) LogValue() slog.Value {
+	return slog.AnyValue(spoof1{})
 }
 
 // test correctness of interpolation and formatting
@@ -137,8 +199,18 @@ func TestLoggerKinds(t *testing.T) {
 		{time.Unix(1, 0).Sub(time.Unix(0, 0)), "", "msg=1s"},
 		{time.Unix(1, 0).Sub(time.Unix(0, 999999000)), "", "msg=1µs"},
 		{time.Unix(1, 0).Sub(time.Unix(1, 0)), "", "msg=0s"},
+
 		// any fmting
 		{struct{}{}, "", "msg={}"},
+
+		// group
+		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", "msg=[A:1,B:2]"},
+
+		// LogValuer
+		{spoof0{}, "", "msg=spoof"},
+		{spoof0{}, "%10s", "msg=\"     spoof\""},
+		{spoof2{}, "", "msg=spoof"},
+		{spoof2{}, "%10s", "msg=\"     spoof\""},
 	}
 
 	log, want := substringTestLogger(t)
