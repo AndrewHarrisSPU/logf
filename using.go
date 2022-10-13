@@ -91,7 +91,7 @@ func usingSource(cfg *config) {
 	cfg.addSource = true
 }
 
-// OPTION / CFG
+// OPTION
 
 type (
 	// Options may be passed around in other packages,
@@ -100,20 +100,70 @@ type (
 		__option__()
 	}
 
-	option[T any] func(*config)
-
+	option[T any]     func(*config)
 	optionFunc[T any] func(T) option[T]
-
-	// options set one or more of these fields
-	config struct {
-		w         io.Writer
-		h         slog.Handler
-		ref       slog.Leveler
-		addSource bool
-	}
-
-	// stand-in types
-	source struct{}
 )
 
 func (option[T]) __option__() {}
+
+// stand-in types
+type source struct{}
+
+// CONFIG
+
+type config struct {
+	w         io.Writer
+	h         slog.Handler
+	ref       slog.Leveler
+	addSource bool
+}
+
+func makeConfig(options ...Option) (cfg config) {
+	// defaults
+	cfg.ref = INFO
+	cfg.w = os.Stdout
+
+	// These depend on other configurations,
+	// so evaluation is delayed
+	var oSlog Option = option[slog.TextHandler](usingText)
+	var oHandler option[slog.Handler]
+
+	// consume options
+	for _, o := range options {
+		switch o := o.(type) {
+		case option[slog.TextHandler], option[slog.JSONHandler]:
+			oSlog = o
+		case option[slog.Handler]:
+			oHandler = o
+		case option[io.Writer]:
+			o(&cfg)
+		case option[slog.Leveler]:
+			o(&cfg)
+		case option[source]:
+			o(&cfg)
+		default:
+			panic("unknown option type")
+		}
+	}
+
+	// use a specified Handler
+	if oHandler != nil {
+		oHandler(&cfg)
+		return
+	}
+
+	// otherwise, build a slog Handler
+	scfg := slog.HandlerOptions{
+		Level:     cfg.ref,
+		AddSource: cfg.addSource,
+	}
+
+	switch oSlog.(type) {
+	case option[slog.JSONHandler]:
+		cfg.h = scfg.NewJSONHandler(cfg.w)
+	case option[slog.TextHandler]:
+		cfg.h = scfg.NewTextHandler(cfg.w)
+	}
+
+	return
+}

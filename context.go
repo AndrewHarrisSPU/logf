@@ -33,7 +33,8 @@ func (l CtxLogger) Msg(ctx context.Context, msg string, args ...any) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(ctx, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, ctx, args)
 	l.h.handle(s, l.level.Level(), msg, nil, 0)
 }
 
@@ -46,7 +47,8 @@ func (l CtxLogger) Err(ctx context.Context, msg string, err error, args ...any) 
 	s := newSplicer()
 	defer s.free()
 
-	s.join(ctx, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, ctx, args)
 	l.h.handle(s, l.level.Level(), msg, err, 0)
 }
 
@@ -55,7 +57,8 @@ func (l CtxLogger) Fmt(ctx context.Context, msg string, err error, args ...any) 
 	s := newSplicer()
 	defer s.free()
 
-	s.join(ctx, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 
 	s.interpolate(msg)
 

@@ -1,13 +1,18 @@
 package logf
 
 import (
-	"io"
-	"os"
 	"time"
 
 	"golang.org/x/exp/slog"
 )
 
+// Handler satisfies the [slog.Handler] interface.
+//
+// When used with a logf [Logger], {keyed} and unkeyed {} interpolation tokens are handled.
+// When used with another logger API (e.g., [slog.Logger]) only {keyed} interpolation is possible.
+//
+// Handler is not an encoder, and forwards records to aonther slog.Handler for that purpose.
+// Whiile any slog.Handler may be an used as an encoder, Handler is unaware of Attr segments held by its encoder.
 type Handler struct {
 	seg       []Attr
 	ref       slog.Leveler
@@ -15,76 +20,28 @@ type Handler struct {
 	addSource bool
 }
 
+// NewHandler constructs a new Handler from a list of Options
+// Options are available in the package variable [Using].
 func NewHandler(options ...Option) *Handler {
-	return newHandler(options...)
+	return newHandler(makeConfig(options...))
 }
 
-func newHandler(options ...Option) *Handler {
-	// CONFIG PART
-	cfg := new(config)
-
-	// These depend on other configurations,
-	// so evaluation is delayed
-	var oSlog Option = option[slog.TextHandler](usingText)
-	var oHandler option[slog.Handler]
-
-	for _, o := range options {
-		switch o := o.(type) {
-		case option[slog.TextHandler], option[slog.JSONHandler]:
-			oSlog = o
-		case option[slog.Handler]:
-			oHandler = o
-		case option[io.Writer]:
-			o(cfg)
-		case option[slog.Leveler]:
-			o(cfg)
-		case option[source]:
-			o(cfg)
-		default:
-			panic("unknown option type")
-		}
-	}
-
-	if cfg.ref == nil {
-		cfg.ref = slog.InfoLevel
-	}
-
-	if cfg.w == nil {
-		cfg.w = os.Stdout
-	}
-
-	// HANDLER PART
+func newHandler(cfg config) *Handler {
 	h := &Handler{
 		seg:       make([]Attr, 0),
 		ref:       cfg.ref,
+		enc:       cfg.h,
 		addSource: cfg.addSource,
 	}
-
-	if oHandler != nil {
-		oHandler(cfg)
-		h.enc = cfg.h
-	} else {
-		// build a slog Handler
-		scfg := slog.HandlerOptions{
-			Level:     cfg.ref,
-			AddSource: cfg.addSource,
-		}
-
-		switch oSlog.(type) {
-		case option[slog.JSONHandler]:
-			h.enc = scfg.NewJSONHandler(cfg.w)
-		case option[slog.TextHandler]:
-			h.enc = scfg.NewTextHandler(cfg.w)
-		}
-	}
-
 	return h
 }
 
+// Enabled indicates whether a [Handler] is enabled for a given level
 func (h *Handler) Enabled(level slog.Level) bool {
 	return h.ref.Level() <= level
 }
 
+// With extends the segment of [Attr]s associated with a [Handler]
 func (h *Handler) With(seg []Attr) slog.Handler {
 	return h.with(seg)
 }
@@ -98,13 +55,17 @@ func (h *Handler) with(seg []Attr) *Handler {
 	}
 }
 
+// Handle performs interpolation on a [slog.Record]'s message
+// The result is passed to another [slog.Handler]
 func (h *Handler) Handle(r slog.Record) error {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, h.seg, nil)
+	s.scan(r.Message(), nil)
+	s.join(h.seg, nil, nil)
+
 	r.Attrs(func(a Attr) {
-		s.dict[a.Key] = a.Value
+		s.dict.match(a)
 	})
 
 	var depth int
@@ -139,7 +100,8 @@ func (h *Handler) handle(
 	}
 
 	r := slog.NewRecord(time.Now(), level, s.msg(), depth)
-	s.list.export(&r)
+	r.AddAttrs(s.export...)
+	// s.list.export(&r)
 
 	return h.enc.Handle(r)
 }

@@ -21,6 +21,11 @@ Structured logging with string interpolation in Go
 |`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
 
+## TODO
+- Benchmarking - time and allocations are possible, but are there other useful metrics?
+   Size of pool (how big is a splicer relative to just a byte buffer?)
+- What about {time}, {level}, {source} interpolation keys? Anything?
+
 ## Opinions That May be Wrong
 
 Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.

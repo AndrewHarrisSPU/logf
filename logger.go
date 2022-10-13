@@ -17,7 +17,7 @@ type Logger struct {
 // Pass options to New, get a Logger!
 func New(options ...Option) Logger {
 	return Logger{
-		h:     newHandler(options...),
+		h:     NewHandler(options...),
 		level: slog.InfoLevel,
 	}
 }
@@ -51,7 +51,8 @@ func (l Logger) Msg(msg string, args ...any) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 	l.h.handle(s, l.level.Level(), msg, nil, 0)
 }
 
@@ -64,7 +65,8 @@ func (l Logger) Err(msg string, err error, args ...any) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 	l.h.handle(s, l.level.Level(), msg, err, 0)
 }
 
@@ -74,7 +76,8 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
 
-	s.join(nil, l.h.seg, args)
+	args = s.scan(msg, args)
+	s.join(l.h.seg, nil, args)
 
 	s.interpolate(msg)
 
@@ -102,7 +105,7 @@ func Segment(args ...any) (seg []Attr) {
 		switch arg := args[0].(type) {
 		case string:
 			if len(args) == 1 {
-				seg = append(seg, slog.String(missingKey, arg))
+				seg = append(seg, slog.String(arg, missingArg))
 				return
 			}
 			seg = append(seg, NewAttr(arg, args[1]))

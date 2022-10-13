@@ -21,11 +21,12 @@ func TestMalformed(t *testing.T) {
 	want(missingArg)
 
 	log.Msg("{item}")
-	want(missingKey)
+	want(missingAttr)
 
 	log.Msg("{something")
 	want(missingRightBracket)
 
+	// only string in args - not enough for an Attr
 	log.Msg("no interpolation", "not-a-key")
 	want(missingArg)
 
@@ -33,13 +34,10 @@ func TestMalformed(t *testing.T) {
 	log.Msg("no interpolation", 0)
 	want(missingKey)
 
-	// can't interpolate from arg segment
-	log.Msg("{x}", slog.Int("x", 1))
-	want(missingKey)
-
 	// both bools appear (no deduplication)
-	log.With("bool", true).Msg("{bool}", slog.Bool("bool", false))
-	want(`"msg":"true","bool":true,"bool":false`)
+	// also: second bool wins for interpolation
+	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
+	want(`"msg":"false","bit":true,"bit":false`)
 
 	// just the second x appears (first consumed by {} in msg)
 	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
