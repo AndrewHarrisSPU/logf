@@ -56,6 +56,9 @@ func TestEscaping(t *testing.T) {
 	log.Msg("{:}", "foo")
 	want(`"msg":"foo"`)
 
+	log.Msg(`file\.txt`)
+	want(`"msg":"file.txt"`)
+
 	log.With("{}", "x").Msg(`{\{\}}`)
 	want(`"msg":"x"`)
 
@@ -79,6 +82,10 @@ func TestEscaping(t *testing.T) {
 
 	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
 	want(`"msg":"What a funny ratio: 2!"`)
+
+	// There is an extra slash introduced by JSON escaping
+	log.Msg(`\{\\`)
+	want(`"msg":"{\\"`)
 
 	// Needs JSON Handler at the moment
 	log.Err("👩‍🦰", errors.New("🛸"))

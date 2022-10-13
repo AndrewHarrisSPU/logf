@@ -3,6 +3,7 @@ package logf
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"golang.org/x/exp/slog"
 )
@@ -95,6 +96,17 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	}
 
 	return msg, err
+}
+
+func Print(msg string, args ...any) {
+	s := newSplicer()
+	defer s.free()
+
+	args = s.scan(msg, args)
+	s.join(nil, nil, args)
+	s.interpolate(msg)
+
+	os.Stdout.WriteString(s.msg() + "\n")
 }
 
 // SEGMENT
