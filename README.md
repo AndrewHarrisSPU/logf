@@ -49,6 +49,12 @@ Both flavors may accomodate a formatting verb, e.g:
 {pi:%3.2f} - keyed, formatting the interpolated value as a float as with `fmt` package
 ```
 
+Group values may be interpolated, but no formatting applies. They 
+
+```
+[k2:v1,k2:v2]
+```
+
 ### Unkeyed arguments
 
 Unkeyed interpolation symbols draw one argument from logging call arguments. One argument is taken per unkeyed symbol:
@@ -80,7 +86,7 @@ log.Msg("Hi", "name", "Mulder")
 ### Escaping
 
 Because '{', '}', and ':' are used as interpolation tokens, they may need to be escaped in messages passed to logging calls.
-A '\' reads as an escape, but will itself need to be escaped in double-quoted strings.
+A '\\' reads as an escape, but will itself need to be escaped in double-quoted strings.
 
 ```
 log.Msg( "About that struct\\{\\}..." )

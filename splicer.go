@@ -6,22 +6,20 @@ import (
 	"strings"
 	"sync"
 	"unicode/utf8"
-
-	"golang.org/x/exp/slog"
 )
 
 type splicer struct {
 	// final spliced output is written to text
 	text
 
- 	// holds parts of interpolated message that need escaping
+	// holds parts of interpolated message that need escaping
 	unescaped []byte
 
 	// holds map of keyed interpolation symbols
 	dict
 
 	// holds list of unkeyed arguments
-	list []any 
+	list []any
 
 	// holds ordered list of exported attrs
 	export []Attr
@@ -34,11 +32,11 @@ func newSplicer() *splicer {
 var spool = sync.Pool{
 	New: func() any {
 		return &splicer{
-			text: make(text, 0, 1024),
+			text:      make(text, 0, 1024),
 			unescaped: make([]byte, 0, 1024),
-			dict: make(dict, 5),
-			list: make([]any, 0, 5),
-			export: make([]Attr, 0, 5),
+			dict:      make(dict, 5),
+			list:      make([]any, 0, 5),
+			export:    make([]Attr, 0, 5),
 		}
 	},
 }
@@ -95,9 +93,9 @@ func (s *splicer) scan(msg string, args []any) []any {
 
 // TODO: micro-optimizing allocs etc. here could be possible.
 // putting it off for now.
-func (s *splicer) unescape(key string)(ukey string ){
+func (s *splicer) unescape(key string) (ukey string) {
 	// TODO: is this worth it?
-	if !strings.ContainsRune(key, '\\' ){
+	if !strings.ContainsRune(key, '\\') {
 		return key
 	}
 
@@ -127,23 +125,23 @@ func (s *splicer) unescape(key string)(ukey string ){
 func scanKey(msg string) (tail, clip string, found bool) {
 	var lpos, rpos int
 
-	if tail, lpos = scanEscape( msg, '{'); lpos < 0 {
+	if tail, lpos = scanEscape(msg, '{'); lpos < 0 {
 		return "", "", false
 	}
 	lpos++
 
-	if tail, rpos = scanEscape( tail, '}'); rpos < 0 {
+	if tail, rpos = scanEscape(tail, '}'); rpos < 0 {
 		return "", "", false
 	}
 	rpos++
 
 	tail = msg[lpos+rpos:]
-	clip = msg[lpos:lpos+rpos-1]
+	clip = msg[lpos : lpos+rpos-1]
 	found = true
 	return
 }
 
-func scanEscape(msg string, sep rune)( tail string, n int){
+func scanEscape(msg string, sep rune) (tail string, n int) {
 	var esc bool
 	for n, r := range msg {
 		switch {
@@ -161,7 +159,7 @@ func scanEscape(msg string, sep rune)( tail string, n int){
 }
 
 // count unkeyed, basically
-func (s *splicer) scanSplitKey(clip string) (key string){
+func (s *splicer) scanSplitKey(clip string) (key string) {
 	n := bytes.LastIndexByte([]byte(clip), ':')
 
 	// no colon, no verb
@@ -206,7 +204,7 @@ func (s *splicer) join(seg []Attr, ctx context.Context, args []any) {
 		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
 			for _, a := range as {
 				s.dict.match(a)
-				s.export = append(s.export, a )
+				s.export = append(s.export, a)
 			}
 		}
 	}
@@ -227,30 +225,6 @@ func (s *splicer) msg() (msg string) {
 // 	msgHeader.Data, msgHeader.Len = textHeader.Data, textHeader.Len
 // 	return
 // }
-
-// DICT / LIST
-
-type dict map[string]slog.Value
-
-func (d dict) prematch(k string){
-	d[k] = slog.StringValue(missingAttr)
-}
-
-func (d dict) match(a Attr){
-	if _, found := d[a.Key]; found {
-		d[a.Key] = a.Value
-	}
-}
-
-func (d dict) insert(a Attr) {
-	d[a.Key] = a.Value
-}
-
-func (d dict) clear() {
-	for k := range d {
-		delete(d, k)
-	}
-}
 
 // INTERPOLATE
 

@@ -40,6 +40,13 @@ func (l Logger) With(args ...any) Logger {
 	}
 }
 
+func (l Logger) WithScope(name string) Logger {
+	return Logger{
+		h:     l.h.withScope(name),
+		level: l.level,
+	}
+}
+
 // LOGGING METHODS
 
 // Msg logs a message
@@ -136,4 +143,19 @@ func Segment(args ...any) (seg []Attr) {
 		}
 	}
 	return
+}
+
+func scopeSegment(prefix string, seg []Attr) []Attr {
+	if prefix == "" {
+		return seg
+	}
+
+	pseg := make([]Attr, 0, len(seg))
+	for _, a := range seg {
+		pseg = append(pseg, Attr{
+			Key:   prefix + a.Key,
+			Value: a.Value,
+		})
+	}
+	return pseg
 }

@@ -11,7 +11,7 @@ import (
 
 const (
 	corruptKind         = "!corrupt-kind"
-	missingAttr			= "!missing-attr"
+	missingAttr         = "!missing-attr"
 	missingArg          = "!missing-arg"
 	missingKey          = "!missing-key"
 	missingRightBracket = "!missing-right-bracket"
@@ -124,6 +124,10 @@ func (t *text) Write(p []byte) (int, error) {
 	return len(*t), nil
 }
 
+func (t *text) appendByte(c byte) {
+	*t = append(*t, c)
+}
+
 func (t *text) appendRune(r rune) {
 	*t = utf8.AppendRune(*t, r)
 }
@@ -161,6 +165,12 @@ func (t *text) appendValueVerb(v slog.Value, verb string) {
 		fmt.Fprintf(t, verb, v.String())
 	case slog.TimeKind:
 		*t = v.Time().AppendFormat(*t, verb)
+	case slog.GroupKind:
+		// TODO: no fmt'ing?
+		t.appendGroup(v.Group())
+
+	case slog.LogValuerKind:
+		t.appendValueVerb(v.Resolve(), verb)
 	case slog.AnyKind:
 		fmt.Fprintf(t, verb, v.Any())
 	default:
@@ -187,6 +197,12 @@ func (t *text) appendValueNoVerb(v slog.Value) {
 	case slog.TimeKind:
 		*t = appendTimeRFC3339Millis(*t, v.Time())
 
+	case slog.GroupKind:
+		t.appendGroup(v.Group())
+
+	case slog.LogValuerKind:
+		t.appendValueNoVerb(v.Resolve())
+
 	case slog.AnyKind:
 		fmt.Fprintf(t, "%v", v.Any())
 
@@ -200,4 +216,16 @@ func (t *text) appendError(err error) {
 		t.appendString(": ")
 	}
 	t.appendString(err.Error())
+}
+
+func (t *text) appendGroup(as []Attr) {
+	next := byte('[')
+	for _, a := range as {
+		t.appendByte(next)
+		t.appendString(a.Key)
+		t.appendByte(':')
+		t.appendValueNoVerb(a.Value)
+		next = ','
+	}
+	t.appendByte(']')
 }

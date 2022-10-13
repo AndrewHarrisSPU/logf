@@ -14,11 +14,22 @@ import (
 // Handler is not an encoder, and forwards records to aonther slog.Handler for that purpose.
 // Whiile any slog.Handler may be an used as an encoder, Handler is unaware of Attr segments held by its encoder.
 type Handler struct {
-	seg       []Attr
+	seg    []Attr
+	prefix string
+
 	ref       slog.Leveler
 	enc       slog.Handler
 	addSource bool
 }
+
+/*
+	Need seg not to have prefixes
+	But need to join prefiexed seg yuck wtf
+
+	scopePrefix       string   // for text: prefix of scopes opened in preformatting
+	scopes            []string // all scopes
+	nOpenScopes       int      // the number of scopes opened in in preformattedAttrs
+*/
 
 // NewHandler constructs a new Handler from a list of Options
 // Options are available in the package variable [Using].
@@ -46,11 +57,27 @@ func (h *Handler) With(seg []Attr) slog.Handler {
 	return h.with(seg)
 }
 
+func (h *Handler) WithScope(name string) slog.Handler {
+	return h.withScope(name)
+}
+
 func (h *Handler) with(seg []Attr) *Handler {
+	pseg := scopeSegment(h.prefix, seg)
+
 	return &Handler{
-		seg:       concat(h.seg, seg),
+		seg:       concat(h.seg, pseg),
 		ref:       h.ref,
 		enc:       h.enc.With(seg),
+		addSource: h.addSource,
+	}
+}
+
+func (h *Handler) withScope(name string) *Handler {
+	return &Handler{
+		seg:       h.seg,
+		prefix:    h.prefix + name + ".",
+		ref:       h.ref,
+		enc:       h.enc.WithScope(name),
 		addSource: h.addSource,
 	}
 }

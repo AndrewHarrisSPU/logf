@@ -9,7 +9,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func BenchmarkLoggerSize(b *testing.B){
+func BenchmarkLoggerSize(b *testing.B) {
 	// b.Run("logf manual", benchLogfInitManual)
 	b.Run("logf init", benchLogfInit)
 	b.Run("logf with 5", benchLogfWith5)
@@ -24,73 +24,73 @@ func BenchmarkLoggerSize(b *testing.B){
 var globalLog Logger
 var globalSlog *slog.Logger
 
-func benchLogfInitManual(b *testing.B){
+func benchLogfInitManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		h := &Handler{
-			seg: make([]Attr, 0),
-			ref: INFO,
-			enc: slog.NewTextHandler(io.Discard),
+			seg:       make([]Attr, 0),
+			ref:       INFO,
+			enc:       slog.NewTextHandler(io.Discard),
 			addSource: false,
 		}
 		globalLog = Logger{h, INFO}
 	}
 }
 
-func benchLogfInit(b *testing.B){
+func benchLogfInit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		globalLog = New( Using.Writer(io.Discard))
+		globalLog = New(Using.Writer(io.Discard))
 	}
 }
 
-func benchSlogInit(b *testing.B){
+func benchSlogInit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		globalSlog = slog.New(slog.NewTextHandler(io.Discard))
-	}	
-}
-
-func benchLogfWith5(b *testing.B){
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		_ = New( Using.Writer(io.Discard)).With(TestAny5...)
 	}
 }
 
-func benchLogfWith10(b *testing.B){
+func benchLogfWith5(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = New( Using.Writer(io.Discard)).With(TestAny10...)
+		_ = New(Using.Writer(io.Discard)).With(TestAny5...)
 	}
 }
 
-func benchLogfWith40(b *testing.B){
+func benchLogfWith10(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = New( Using.Writer(io.Discard)).With(TestAny40...)
+		_ = New(Using.Writer(io.Discard)).With(TestAny10...)
 	}
 }
 
-func benchSlogWith5(b *testing.B){
+func benchLogfWith40(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = New(Using.Writer(io.Discard)).With(TestAny40...)
+	}
+}
+
+func benchSlogWith5(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny5...)
-	}	
+	}
 }
 
-func benchSlogWith10(b *testing.B){
+func benchSlogWith10(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny10...)
-	}	
+	}
 }
 
-func benchSlogWith40(b *testing.B){
+func benchSlogWith40(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny40...)
-	}	
+	}
 }
 
 func BenchmarkAttrs(b *testing.B) {
@@ -203,7 +203,6 @@ func BenchmarkAttrs(b *testing.B) {
 		})
 	}
 }
-
 
 const TestMessage = "Test logging, but use a somewhat realistic message length."
 
