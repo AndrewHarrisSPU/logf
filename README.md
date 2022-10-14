@@ -4,7 +4,7 @@ Structured logging with string interpolation in Go
 ## Goals
 - Explore `x/exp/slog`
 - Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing.
-- Sometimes developers want a simpler API, with formatting. String interpolation is an experiment in sugar. 
+- Sometimes developers want a simpler API, with formatting. `logf` is an experiment in string interpolation sugar. 
 - This isn't zero-allocating. Low allocation is a goal, but there are tradeoffs.
 
 ## What's where
@@ -17,6 +17,7 @@ Structured logging with string interpolation in Go
 |`logger.go`| Logger |
 |`minimal.go`| a minimal encoder|
 |`splicer.go`| interpolation state |
+|`splicer2.go`| matching routines |
 |`testutil.go`| testing gadgets |
 |`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
@@ -49,10 +50,9 @@ Both flavors may accomodate a formatting verb, e.g:
 {pi:%3.2f} - keyed, formatting the interpolated value as a float as with `fmt` package
 ```
 
-Group values may be interpolated, but no formatting applies. They 
-
+Group values may be interpolated, but no formatting applies. They look like this:
 ```
-[k2:v1,k2:v2]
+[k2=v1 k2=v2]
 ```
 
 ### Unkeyed arguments

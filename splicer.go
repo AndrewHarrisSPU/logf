@@ -13,12 +13,13 @@ type splicer struct {
 	text
 
 	// holds parts of interpolated message that need escaping
-	unescaped []byte
+	// also holds stack of keys when interpolating groups
+	scratch []byte
 
 	// holds map of keyed interpolation symbols
 	dict
 
-	// holds list of unkeyed arguments
+	// holds ordered list of unkeyed arguments
 	list []any
 
 	// holds ordered list of exported attrs
@@ -32,27 +33,29 @@ func newSplicer() *splicer {
 var spool = sync.Pool{
 	New: func() any {
 		return &splicer{
-			text:      make(text, 0, 1024),
-			unescaped: make([]byte, 0, 1024),
-			dict:      make(dict, 5),
-			list:      make([]any, 0, 5),
-			export:    make([]Attr, 0, 5),
+			text:    make(text, 0, 1024),
+			scratch: make([]byte, 0, 1024),
+			dict:    make(dict, 5),
+			list:    make([]any, 0, 5),
+			export:  make([]Attr, 0, 5),
 		}
 	},
 }
 
+// contains heuristics for killing splicers that are too large
+// TODO: think through implications
 func (s *splicer) free() {
 	const maxTextSize = 16 << 10
 	const maxAttrSize = 128
 
-	ok := cap(s.text) < maxTextSize
+	ok := cap(s.text)+cap(s.scratch) < maxTextSize
 	ok = ok && (len(s.dict)+cap(s.list)+cap(s.export)) < maxAttrSize
 
 	if ok {
 		s.dict.clear()
 
 		// TODO: clear smarter
-		s.unescaped = s.unescaped[:0]
+		s.scratch = s.scratch[:0]
 		s.list = s.list[:0]
 		s.export = s.export[:0]
 
@@ -99,7 +102,7 @@ func (s *splicer) unescape(key string) (ukey string) {
 		return key
 	}
 
-	lpos := len(s.unescaped)
+	lpos := len(s.scratch)
 	var esc bool
 	for _, r := range key {
 		if r == '\\' && !esc {
@@ -107,15 +110,15 @@ func (s *splicer) unescape(key string) (ukey string) {
 			continue
 		}
 		esc = false
-		s.unescaped = utf8.AppendRune(s.unescaped, r)
+		s.scratch = utf8.AppendRune(s.scratch, r)
 	}
-	rpos := len(s.unescaped)
+	rpos := len(s.scratch)
 
-	return string(s.unescaped[lpos:rpos])
+	return string(s.scratch[lpos:rpos])
 
 	// TODO: this hould be safe
 
-	// u := s.unescaped[lpos:rpos]
+	// u := s.scratch[lpos:rpos]
 	// uHeader := (*reflect.SliceHeader)(unsafe.Pointer(&u))
 	// uKeyHeader := (*reflect.StringHeader)(unsafe.Pointer(&ukey))
 	// uKeyHeader.Data, uKeyHeader.Len = uHeader.Data, uHeader.Len
@@ -191,19 +194,22 @@ func (s *splicer) scanSplitKey(clip string) (key string) {
 
 func (s *splicer) join(seg []Attr, ctx context.Context, args []any) {
 	for _, a := range seg {
-		s.dict.match(a)
+		s.match(a)
+		// s.dict.match(a)
 	}
 
 	ex := Segment(args...)
 	for _, a := range ex {
-		s.dict.match(a)
+		s.match(a)
+		// s.dict.match(a)
 	}
 	s.export = append(s.export, ex...)
 
 	if ctx != nil {
 		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
 			for _, a := range as {
-				s.dict.match(a)
+				s.match(a)
+				// s.dict.match(a)
 				s.export = append(s.export, a)
 			}
 		}

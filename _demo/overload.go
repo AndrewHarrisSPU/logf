@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 
 	"golang.org/x/exp/slog"
@@ -24,4 +25,13 @@ func main() {
 
 	mulder := Agent{ "Fox", "Mulder" }
 	print( "{}", mulder )
+
+	print( "{:%+v}", struct{
+		first string
+		last string
+	}{ first: "Fox", last: "Mulder" })
+
+	print( "{:%+v}", []string{ "Fox", "Mulder" })
+
+	fmt.Println( []slog.Attr{ slog.String( "first", "Fox" ), slog.String( "last", "Mulder" )})
 }

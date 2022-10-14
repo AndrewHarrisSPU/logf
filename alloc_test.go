@@ -165,3 +165,24 @@ func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 		_, _ = log.Fmt(msg, nil)
 	}
 }
+
+func TestAllocsGroups(t *testing.T) {
+	log := setupDiscardLog()
+
+	g := slog.Group("1", slog.String("roman", "i"))
+	log = log.With(g)
+
+	fn := func() {
+		log.Msg("")
+	}
+
+	t.Run("group", func(t *testing.T) {
+		wantAllocs(t, 1, fn)
+	})
+
+	fn = func() { log.Msg("{1.roman}") }
+
+	t.Run("group", func(t *testing.T) {
+		wantAllocs(t, 1, fn)
+	})
+}

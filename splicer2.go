@@ -1,8 +1,6 @@
 package logf
 
 import (
-	"strings"
-
 	"golang.org/x/exp/slog"
 )
 
@@ -10,15 +8,6 @@ type dict map[string]slog.Value
 
 func (d dict) prematch(k string) {
 	d[k] = slog.StringValue(missingAttr)
-}
-
-func (d dict) match(a Attr) {
-	if _, found := d[a.Key]; found {
-		d[a.Key] = a.Value
-	}
-	if a.Value.Kind() == slog.GroupKind {
-		d.matchRec([]string{}, a)
-	}
 }
 
 func (d dict) insert(a Attr) {
@@ -31,24 +20,50 @@ func (d dict) clear() {
 	}
 }
 
-func (d dict) matchRec(keys []string, a Attr) {
-	keys = append(keys, a.Key)
+// root of matching invocation
+func (s *splicer) match(a Attr) {
+	if _, found := s.dict[a.Key]; found {
+		s.dict[a.Key] = a.Value
+	}
+	if a.Value.Kind() == slog.GroupKind {
+		// store a marker that deliminates s.scratch state before matchRec operations
+		gpos := len(s.scratch)
 
-	for _, a := range a.Value.Group() {
-		// recurse for GroupKind
+		// push attr key
+		s.scratch = append(s.scratch, a.Key...)
+		s.scratch = append(s.scratch, '.')
+
+		s.matchRec(a, gpos)
+
+		// pop attr key
+		s.scratch = s.scratch[:gpos]
+	}
+}
+
+// recursive matching invocation
+func (s *splicer) matchRec(group Attr, gpos int) {
+	// store a marker that deliminates s.scratch state per attr operation
+	apos := len(s.scratch)
+
+	// iterate group elements and match
+	for _, a := range group.Value.Group() {
+		// push attr key
+		s.scratch = append(s.scratch, a.Key...)
+
+		// match
+		key := string(s.scratch[gpos:])
+		if _, found := s.dict[key]; found {
+			s.dict[key] = a.Value
+		}
+
+		// recursively matchRec, one deeper level
+		// keep gpos invariant through matchRec
 		if a.Value.Kind() == slog.GroupKind {
-			d.matchRec(keys, a)
+			s.scratch = append(s.scratch, '.')
+			s.matchRec(a, gpos)
 		}
 
-		// push key
-		keys = append(keys, a.Key)
-
-		key := strings.Join(keys, ".")
-		if _, found := d[key]; found {
-			d[key] = a.Value
-		}
-
-		// pop key
-		keys = keys[:len(keys)-1]
+		// pop attr key
+		s.scratch = s.scratch[:apos]
 	}
 }

@@ -223,9 +223,9 @@ func (t *text) appendGroup(as []Attr) {
 	for _, a := range as {
 		t.appendByte(next)
 		t.appendString(a.Key)
-		t.appendByte(':')
+		t.appendByte('=')
 		t.appendValueNoVerb(a.Value)
-		next = ','
+		next = ' '
 	}
 	t.appendByte(']')
 }

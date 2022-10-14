@@ -92,7 +92,7 @@ func (h *Handler) Handle(r slog.Record) error {
 	s.join(h.seg, nil, nil)
 
 	r.Attrs(func(a Attr) {
-		s.dict.match(a)
+		s.match(a)
 	})
 
 	var depth int

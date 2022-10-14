@@ -71,6 +71,9 @@ func TestEscaping(t *testing.T) {
 	log.Msg("{:%3s}", "x")
 	want(`"msg":"  x"`)
 
+	log.Msg(`{\:%3s}`, slog.String(`:%3s`, "esc"))
+	want(`"msg":"esc"`)
+
 	log.With(`:attr`, "common-lisp").Msg(`{\:attr}`)
 	want(`"msg":"common-lisp"`)
 
@@ -83,7 +86,7 @@ func TestEscaping(t *testing.T) {
 	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
 	want(`"msg":"What a funny ratio: 2!"`)
 
-	// There is an extra slash introduced by JSON escaping
+	// There is an extra slash introduced by JSON escaping vs Text escaping
 	log.Msg(`\{\\`)
 	want(`"msg":"{\\"`)
 
@@ -112,7 +115,7 @@ func TestLoggerErr(t *testing.T) {
 	}
 }
 
-func TestGroup(t *testing.T) {
+func TestLoggerGroup(t *testing.T) {
 	log, want := substringTestLogger(t)
 
 	// one group
@@ -120,7 +123,7 @@ func TestGroup(t *testing.T) {
 	log.Msg("Hi, {1.first} {1.last}", mulder)
 	want("Hi, Fox Mulder")
 
-	// two groups
+	// two (nested) groups
 	scully := slog.Group("2", slog.String("first", "Dana"), slog.String("last", "Scully"))
 	agents := slog.Group("agents", mulder, scully)
 	log.Msg("Hi, {agents.1.last} and {agents.2.last}", agents)
@@ -128,7 +131,7 @@ func TestGroup(t *testing.T) {
 
 	// raw
 	log.Msg("{}", agents)
-	want("msg=[1:[first:Fox,last:Mulder],2:[first:Dana,last:Scully]]")
+	want("[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]]")
 }
 
 func TestScope(t *testing.T) {
@@ -144,9 +147,14 @@ func TestScope(t *testing.T) {
 	files.Msg("{files.x}")
 	want("msg=true")
 
-	// two scopes
-	log = log.WithScope("x").WithScope("agent").With("last", "Scully")
-	log.Msg("Hi, {x.agent.last}")
+	// two scopes, and a group
+	log = log.WithScope("files").WithScope("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log.Msg("Hi, {files.agent.name.last}")
+	want("Hi, Scully")
+
+	// branching in scope
+	log = log.WithScope("files").With("x", true).WithScope("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }
 
@@ -204,7 +212,7 @@ func TestLoggerKinds(t *testing.T) {
 		{struct{}{}, "", "msg={}"},
 
 		// group
-		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", "msg=[A:1,B:2]"},
+		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", "msg=\"[A=1 B=2]\""},
 
 		// LogValuer
 		{spoof0{}, "", "msg=spoof"},
