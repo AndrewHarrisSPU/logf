@@ -177,10 +177,12 @@ func (s *splicer) interpolateKeyed(key, verb []byte) {
 // read each of seg / ctx / remaining args (order matters)
 // update interpolation dictionary and export list
 func (s *splicer) join(seg []Attr, ctx context.Context, args []any) {
+	// handler segment
 	for _, a := range seg {
 		s.match(a)
 	}
 
+	// context
 	if ctx != nil {
 		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
 			for _, a := range as {
@@ -190,12 +192,15 @@ func (s *splicer) join(seg []Attr, ctx context.Context, args []any) {
 		}
 	}
 
+	// unkeyed
+	// (allocates a bit for Groups, hmm)
 	for _, arg := range s.list {
 		if a, ok := arg.(Attr); ok {
 			s.match(a)
 		}
 	}
 
+	// keyed
 	ex := Segment(args...)
 	for _, a := range ex {
 		s.match(a)

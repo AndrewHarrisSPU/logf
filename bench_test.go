@@ -34,7 +34,7 @@ func benchLogfInitManual(b *testing.B) {
 			enc:       slog.NewTextHandler(io.Discard),
 			addSource: false,
 		}
-		globalLog = Logger{h, INFO}
+		globalLog = Logger{h, INFO, 0}
 	}
 }
 

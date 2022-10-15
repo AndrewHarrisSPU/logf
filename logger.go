@@ -11,6 +11,7 @@ import (
 type Logger struct {
 	h     *Handler
 	level slog.Leveler
+	depth int
 }
 
 // CONSTRUCTION
@@ -26,10 +27,14 @@ func New(options ...Option) Logger {
 // Level is intended for chaining calls, e.g.:
 // log.Level(INFO+1).Msg("") logs at INFO+1
 func (l Logger) Level(level slog.Leveler) Logger {
-	return Logger{
-		h:     l.h,
-		level: level,
-	}
+	l.level = level
+	return l
+}
+
+// Depth is used to modulate source file/line retrieval.
+func (l Logger) Depth(depth int) Logger {
+	l.depth += depth
+	return l
 }
 
 // With extends the structure held in the Logger.
@@ -56,12 +61,16 @@ func (l Logger) Msg(msg string, args ...any) {
 		return
 	}
 
+	if l.depth != 0 {
+		l.depth -= 2
+	}
+
 	s := newSplicer()
 	defer s.free()
 
 	args = s.scan(msg, args)
 	s.join(l.h.seg, nil, args)
-	l.h.handle(s, l.level.Level(), msg, nil, 0)
+	l.h.handle(s, l.level.Level(), msg, nil, l.depth)
 }
 
 // Err logs a message with an appended error
@@ -70,12 +79,16 @@ func (l Logger) Err(msg string, err error, args ...any) {
 		return
 	}
 
+	if l.depth != 0 {
+		l.depth -= 2
+	}
+
 	s := newSplicer()
 	defer s.free()
 
 	args = s.scan(msg, args)
 	s.join(l.h.seg, nil, args)
-	l.h.handle(s, l.level.Level(), msg, err, 0)
+	l.h.handle(s, l.level.Level(), msg, err, l.depth)
 }
 
 // Fmt interpolates like [Logger.Msg] or [Logger.Err].

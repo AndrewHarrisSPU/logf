@@ -157,6 +157,19 @@ func TestScope(t *testing.T) {
 	want("Hi, Scully")
 }
 
+func TestDepth(t *testing.T) {
+	log, want := substringTestLogger(t, Using.Source)
+	fn := func() {
+		log.Depth(1).Msg("where am I")
+	}
+
+	fn()
+	want("logger_test.go:163")
+
+	fn()
+	want("logger_test.go:163")
+}
+
 // spoofy types to test LogValuer
 type (
 	spoof0 struct{}

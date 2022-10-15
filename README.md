@@ -3,9 +3,7 @@ Structured logging with string interpolation in Go
 
 ## Goals
 - Explore `x/exp/slog`
-- Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing.
-- Sometimes developers want a simpler API, with formatting. `logf` is an experiment in string interpolation sugar. 
-- This isn't zero-allocating. Low allocation is a goal, but there are tradeoffs.
+- Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing. Still, sometimes a small API with formatting is nice to use. `logf` is an experiment in string interpolation sugar.
 
 ## What's where
 
@@ -24,9 +22,9 @@ Structured logging with string interpolation in Go
 |`using.go`| configuration via Options|
 
 ## TODO
+- Fix source depth
 - Benchmarking - time and allocations are possible, but are there other useful metrics?
    Size of pool (how big is a splicer relative to just a byte buffer?)
-- What about {time}, {level}, {source} interpolation keys? Anything?
 
 ## Opinions That May be Wrong
 
@@ -43,12 +41,12 @@ Part of experimenting with `slog` is figuring out what the opinions are, and wha
 ### Interpolation symbols
 Message strings in `logf` may contain interpolation symbols. There are two varieties of interpolation symbols:
 - unkeyed `{}`, which consume arguments like `fmt` or the built-in `print`
-- keyed `{keystring}`, where an interpolation dictionary is used to find an `Attr` associated with `keystring`
+- keyed `{keystring}`, where an interpolation dictionary associates `keystring` with a `slog.Value`. The interpolation dictionary is populated by a `Handler`'s structured `Attr`s, or arguments in a logging call.
 
-Both flavors may accomodate a formatting verb, passed to `fmt`:
+Both flavors accomodate formatting verbs (generally, the verb passed to `fmt`):
 ```
 {:%s} - unkeyed, formatted as a string
-{pi:%3.2f} - keyed, formatting the interpolated value as a float as with `fmt` package
+{pi:%3.2f} - keyed, formatting as a float
 ```
 
 ### Examples:
@@ -98,6 +96,10 @@ log.MSg("{1.ii}")
 log.Msg("{1}")
 	-> msg="[i=first off, this thing ii=and another thing]"
 ```
+
+### Ordering
+`Attr`s join the interpolation dictionary in a specific order: `Handler` segments, `context.Context` segments, arguments.
+If non-unique `Attr` keys are seen, the last seen `Attr` wins.
 
 ### Special verbs
 Time and duraton may accept some special verbs:

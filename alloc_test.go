@@ -95,10 +95,12 @@ func TestAllocKindsLogger(t *testing.T) {
 		{1, 1, 1, time.Now(), ""},
 		{2, 2, 2, time.Now(), time.Kitchen},
 		{1, 1, 1, time.Since(time.Now()), ""},
+
+		// any
 		{1, 1, 1, struct{}{}, ""},
 
 		// group
-		{1, 1, 1, slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), ""},
+		{3, 3, 3, slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), ""},
 
 		// LogValuer
 		{1, 1, 1, spoof0{}, ""},
