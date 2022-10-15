@@ -90,7 +90,7 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s.interpolate(msg)
 
 	if err != nil && len(msg) > 0 {
-		s.text.appendString(": %w")
+		s.writeString(": %w")
 		err = fmt.Errorf(s.msg(), err)
 		msg = err.Error()
 	}

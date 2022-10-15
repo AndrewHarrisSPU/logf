@@ -63,7 +63,7 @@ func (l CtxLogger) Fmt(ctx context.Context, msg string, err error, args ...any) 
 	s.interpolate(msg)
 
 	if err != nil && len(msg) > 0 {
-		s.text.appendString(": %w")
+		s.writeString(": %w")
 		err = fmt.Errorf(s.msg(), err)
 		msg = err.Error()
 	}

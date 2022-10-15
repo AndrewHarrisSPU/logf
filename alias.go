@@ -118,10 +118,10 @@ func appendTimeRFC3339Millis(buf []byte, t time.Time) []byte {
 	return buf
 }
 
-// FROM: time.Duration.String, modified for appending
+// FROM: time.Duration.String, modified for appending into buf
 
 func appendDuration(buf []byte, d time.Duration) []byte {
-	zed := len(buf)
+	lpos := len(buf)
 
 	for i := 0; i < 32; i++ {
 		buf = append(buf, 0x00)
@@ -143,8 +143,8 @@ func appendDuration(buf []byte, d time.Duration) []byte {
 		w--
 		switch {
 		case u == 0:
-			buf[zed], buf[zed+1] = '0', 's'
-			return buf[:zed+2]
+			buf[lpos], buf[lpos+1] = '0', 's'
+			return buf[:lpos+2]
 		case u < uint64(time.Microsecond):
 			prec = 0
 			buf[w] = 'n'
@@ -186,13 +186,13 @@ func appendDuration(buf []byte, d time.Duration) []byte {
 		buf[w] = '-'
 	}
 
-	width := 32 - (w - zed)
-	gap := zed + (32 - width)
+	width := 32 - (w - lpos)
+	gap := lpos + (32 - width)
 	for i := 0; i < width; i++ {
-		buf[zed+i] = buf[gap+i]
+		buf[lpos+i] = buf[gap+i]
 	}
 
-	return buf[:zed+width]
+	return buf[:lpos+width]
 }
 
 // fmtFrac formats the fraction of v/10**prec (e.g., ".12345") into the

@@ -16,8 +16,9 @@ Structured logging with string interpolation in Go
 |`handler.go`| Handler |
 |`logger.go`| Logger |
 |`minimal.go`| a minimal encoder|
-|`splicer.go`| interpolation state |
-|`splicer2.go`| matching routines |
+|`splicer.go`| splicer mgmt, join, matching |
+|`splicer2.go`| message scan |
+|`splicer3.go`| interpolate and write |
 |`testutil.go`| testing gadgets |
 |`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
@@ -40,32 +41,27 @@ Part of experimenting with `slog` is figuring out what the opinions are, and wha
 ## Interpolation
 
 ### Interpolation symbols
-During interpolation, an input message is scanned for interpolation symbols. There are two flavors of these:
-- unkeyed `{}`
-- keyed `{keystring}`, where an interpolation dictionary is used to find an Attr associated with `keystring`
+Message strings in `logf` may contain interpolation symbols. There are two varieties of interpolation symbols:
+- unkeyed `{}`, which consume arguments like `fmt` or the built-in `print`
+- keyed `{keystring}`, where an interpolation dictionary is used to find an `Attr` associated with `keystring`
 
-Both flavors may accomodate a formatting verb, e.g:
+Both flavors may accomodate a formatting verb, passed to `fmt`:
 ```
 {:%s} - unkeyed, formatted as a string
 {pi:%3.2f} - keyed, formatting the interpolated value as a float as with `fmt` package
 ```
 
-Group values may be interpolated, but no formatting applies. They look like this:
-```
-[k2=v1 k2=v2]
-```
-
-### Unkeyed arguments
-
-Unkeyed interpolation symbols draw one argument from logging call arguments. One argument is taken per unkeyed symbol:
+### Examples:
+Unkeyed arguments draw from arguments, like `print`:
 ```
 log.Msg("{}", "a")
 	-> msg="a"
+
 log.Msg("{}, {}", 0, 1)
 	-> msg="0, 1"
 ```
 
-If an unkeyed interpolation sees an Attr, the Attr is exported. It is not added to the interpolation dictionary, however.
+If an unkeyed argument is an `Attr`, it will export:
 ```
 exported := slog.Bool( "exported", true)
 
@@ -73,15 +69,41 @@ log.Msg("{}", exported)
 	-> msg="true" exported=true
 
 log.Msg("{} {exported}", exported)
-	-> msg="true !missing-key" exported=true
+	-> msg="true true" exported=true
 ```
 
-### Keyed arguments
-Any arguments present after exhausting unkeyed interpolations are converted as key-value pairs.
+After exhausting unkeyed interpolations, `Attr`s are converted as key-value pairs (like `slog`):
 ```
 log.Msg("Hi", "name", "Mulder")
 	-> msg="Hi" name=Mulder
+
+log.Msg("Hi, {name}", "name", "Mulder")
+	-> msg="Hi, Mulder" name=Mulder
 ```
+
+### Groups
+A `.` may be used in named interpolation keys to access grouped `Attr`s:
+A `Group`-valued `Attr` will expand on interpolation.
+
+```
+log = log.With(
+	slog.Group( "1",
+		slog.String( "i", "first off, this thing" ),
+		slog.String( "ii", "and another thing" )))
+		
+log.Msg("{1.i}")
+	-> msg="first off, this thing"
+log.MSg("{1.ii}")
+	-> msg="and another thing"
+log.Msg("{1}")
+	-> msg="[i=first off, this thing ii=and another thing]"
+```
+
+### Special verbs
+Time and duraton may accept some special verbs:
+- a time value may format with `{:RFC3339}`, `{:kitchen}`, `{:stamp}`, or `{:epoch}` (for seconds into the current Unix epoch).
+- interpolation can almost accept time layout strings - any occurence of a `:` should be replaced by a `;`.
+- a duration value may format with `{:fast}` (like epoch). Otherwise, it formats like a string.
 
 ### Escaping
 
@@ -100,5 +122,6 @@ Log.With( "x:y ratio", 2 ).Msg( `What a funny ratio: {x\:y ratio}!` )
 	-> msg="What a funny ratio: 2!"
 ```
 
-## Problems:
-- When freeing a splicer, map length rather than map capacity is used to determine if the splicer should be returned to the pool. This may not be ideal.
+## Yet unsolved problems:
+- Precompiling messages (as a compiler might with language level fstrings) would be a bit more performant, and more straightforward about escaping.
+- `sync.Pool` objects don't shrink in size, the mem pinning behavior is simple and workable. (sort of a general question with `sync.Pool`).

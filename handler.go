@@ -22,15 +22,6 @@ type Handler struct {
 	addSource bool
 }
 
-/*
-	Need seg not to have prefixes
-	But need to join prefiexed seg yuck wtf
-
-	scopePrefix       string   // for text: prefix of scopes opened in preformatting
-	scopes            []string // all scopes
-	nOpenScopes       int      // the number of scopes opened in in preformattedAttrs
-*/
-
 // NewHandler constructs a new Handler from a list of Options
 // Options are available in the package variable [Using].
 func NewHandler(options ...Option) *Handler {
@@ -57,6 +48,7 @@ func (h *Handler) With(seg []Attr) slog.Handler {
 	return h.with(seg)
 }
 
+// WithScope opens a namespace. Every subsequent Attr key is prefixed with the name.
 func (h *Handler) WithScope(name string) slog.Handler {
 	return h.withScope(name)
 }
@@ -119,7 +111,7 @@ func (h *Handler) handle(
 ) error {
 	s.interpolate(msg)
 	if err != nil {
-		s.appendError(err)
+		s.writeError(err)
 	}
 
 	if h.addSource {
@@ -128,7 +120,6 @@ func (h *Handler) handle(
 
 	r := slog.NewRecord(time.Now(), level, s.msg(), depth)
 	r.AddAttrs(s.export...)
-	// s.list.export(&r)
 
 	return h.enc.Handle(r)
 }

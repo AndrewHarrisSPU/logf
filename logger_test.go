@@ -37,7 +37,6 @@ func TestMalformed(t *testing.T) {
 	// both bools appear (no deduplication)
 	// also: second bool wins for interpolation
 	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
-	want(`"msg":"false","bit":true,"bit":false`)
 
 	// just the second x appears (first consumed by {} in msg)
 	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
@@ -130,8 +129,8 @@ func TestLoggerGroup(t *testing.T) {
 	want("Hi, Mulder and Scully")
 
 	// raw
-	log.Msg("{}", agents)
-	want("[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]]")
+	log.Msg("{} {first}", agents, "first", "1?")
+	want(`msg="[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]] 1?"`)
 }
 
 func TestScope(t *testing.T) {
@@ -197,16 +196,18 @@ func TestLoggerKinds(t *testing.T) {
 
 		// time fmting
 		{time.Unix(0, 0), "", "msg=1969-12-31T16:00:00.000-08:00"},
-
-		// colons in time formats break things...
-		// it seems plausible to say encoder decides time formatting anyway
-		// {time.Unix(0, 0), time.Kitchen, "msg=4:00PM"},
+		{time.Unix(0, 0), "RFC3339", "msg=1969-12-31T16:00:00-08:00"},
+		{time.Unix(0, 0), "epoch", "msg=0"},
+		{time.Unix(0, 0), "kitchen", "msg=4:00PM"},
+		{time.Unix(0, 0), "stamp", "msg=\"Dec 31 16:00:00\""},
+		{time.Unix(0, 0), "01/02 03;04;05PM '06 -0700", "msg=\"12/31 04:00:00PM '69 -0800\""},
 
 		// duration fmting
 		{time.Unix(3661, 0).Sub(time.Unix(0, 0)), "", "msg=1h1m1s"},
 		{time.Unix(1, 0).Sub(time.Unix(0, 0)), "", "msg=1s"},
 		{time.Unix(1, 0).Sub(time.Unix(0, 999999000)), "", "msg=1µs"},
 		{time.Unix(1, 0).Sub(time.Unix(1, 0)), "", "msg=0s"},
+		{time.Unix(2, 2).Sub(time.Unix(1, 1)), "fast", "msg=1"},
 
 		// any fmting
 		{struct{}{}, "", "msg={}"},

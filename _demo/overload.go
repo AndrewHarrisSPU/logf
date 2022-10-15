@@ -32,6 +32,4 @@ func main() {
 	}{ first: "Fox", last: "Mulder" })
 
 	print( "{:%+v}", []string{ "Fox", "Mulder" })
-
-	fmt.Println( []slog.Attr{ slog.String( "first", "Fox" ), slog.String( "last", "Mulder" )})
 }

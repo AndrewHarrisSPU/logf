@@ -14,7 +14,7 @@ type gopher struct {
 
 func newGopher(log logf.Logger, i uint) gopher {
 	return gopher{
-		log: log.With("id", i),
+		log: log.With( ".", "gopher", "id", i ),
 	}
 }
 
@@ -22,9 +22,9 @@ func (g gopher) add(ns <-chan uint, sums chan<- uint) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			g.log.Msg("", "sum", g.sum)
+			g.log.Level(logf.DEBUG).Msg("{.} {id}", g.sum)
 		}
-		g.log.Level(logf.INFO+1).Msg("gopher {id:%d} done", "sum", g.sum)
+		g.log.Level(logf.INFO+1).Msg("{.} {id} done: {}", g.sum)
 		sums <- g.sum
 	}()
 }
@@ -42,7 +42,7 @@ func main() {
 		logf.Using.Level(slog.Level(*verbosity)),
 	}
 
-	log := logf.New(cfg...).With("job", "Eulerian Gophers")
+	log := logf.New(cfg...).With(".", "Eulerian Gophers")
 
 	ns, sums := make(chan uint), make(chan uint)
 
@@ -65,5 +65,5 @@ func main() {
 		total += <-sums
 	}
 
-	log.Level(logf.INFO+2).Msg("final: {}", total)
+	log.Level(logf.INFO+2).Msg("{.} done: {}", total)
 }
