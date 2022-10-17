@@ -3,7 +3,6 @@ package logf
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"golang.org/x/exp/slog"
 )
@@ -33,29 +32,27 @@ func (l Logger) Level(level slog.Leveler) Logger {
 
 // Depth is used to modulate source file/line retrieval.
 func (l Logger) Depth(depth int) Logger {
-	l.depth += depth
+	l.depth = depth
 	return l
 }
 
 // With extends the structure held in the Logger.
 // Arguments are munged through Segment.
 func (l Logger) With(args ...any) Logger {
-	return Logger{
-		h:     l.h.with(Segment(args...)),
-		level: l.level,
-	}
+	l.h = l.h.with(Segment(args...))
+	return l
 }
 
+// WithScope scopes future keys provided to [Logger.With] by prefixing their keys with `name`.
+// There are some subtle behaviors when interpolating scopes.
 func (l Logger) WithScope(name string) Logger {
-	return Logger{
-		h:     l.h.withScope(name),
-		level: l.level,
-	}
+	l.h = l.h.withScope(name)
+	return l
 }
 
 // LOGGING METHODS
 
-// Msg logs a message
+// Msg interpolates a message string, and logs it.
 func (l Logger) Msg(msg string, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -73,7 +70,7 @@ func (l Logger) Msg(msg string, args ...any) {
 	l.h.handle(s, l.level.Level(), msg, nil, l.depth)
 }
 
-// Err logs a message with an appended error
+// Err logs a message, appending the error string to the message text.
 func (l Logger) Err(msg string, err error, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
@@ -92,7 +89,11 @@ func (l Logger) Err(msg string, err error, args ...any) {
 }
 
 // Fmt interpolates like [Logger.Msg] or [Logger.Err].
-// The result is not written to a log,
+// The result is not written to a log, but returned.
+// The returned string is the interpolation of msg.
+// With a nil error, Fmt emits a nil error.
+// Otherwise, the returned error stringifies to the returned string.
+// but is wrapped with [fmt.Errorf] (preserving [errors.Is], [errors.As] behavior).
 func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
@@ -106,11 +107,15 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 		s.writeString(": %w")
 		err = fmt.Errorf(s.msg(), err)
 		msg = err.Error()
+	} else {
+		msg = s.msg()
 	}
 
 	return msg, err
 }
 
+// Print is formats and interpolates msg using args.
+// The result is passed to `println`.
 func Print(msg string, args ...any) {
 	s := newSplicer()
 	defer s.free()
@@ -119,7 +124,7 @@ func Print(msg string, args ...any) {
 	s.join(nil, nil, args)
 	s.interpolate(msg)
 
-	os.Stdout.WriteString(s.msg() + "\n")
+	println(s.msg())
 }
 
 // SEGMENT

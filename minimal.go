@@ -41,6 +41,7 @@ func usingMinimal(elapsed, export bool) option[slog.Handler] {
 		m.w = cfg.w
 		m.ref = cfg.ref
 		m.addSource = cfg.addSource
+		m.zeroTime = !elapsed
 
 		cfg.h = m
 	}
@@ -114,14 +115,15 @@ func (m *minimal) writeTime(r slog.Record) {
 	case m.elapsed:
 		s := fmt.Sprintf("%-6s", time.Since(m.start).Round(time.Millisecond).String())
 		io.WriteString(m.w, s)
+		m.writeSpace()
 	default:
 		io.WriteString(m.w, r.Time().Format(m.layout))
+		m.writeSpace()
 	}
 }
 
 func (m *minimal) writeMessage(msg string) {
 	if len(msg) > 0 {
-		m.writeSpace()
 		io.WriteString(m.w, msg)
 	}
 }

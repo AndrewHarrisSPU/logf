@@ -14,6 +14,7 @@ type segmentKey struct{}
 type CtxLogger struct {
 	h     *Handler
 	level slog.Leveler
+	depth int
 }
 
 // Contextual returns a CtxLogger that is otherwise identical to the Logger
@@ -21,7 +22,32 @@ func (l Logger) Contextual() CtxLogger {
 	return CtxLogger{
 		h:     l.h,
 		level: l.level,
+		depth: l.depth,
 	}
+}
+
+// See [Logger.Level]
+func (l CtxLogger) Level(level slog.Leveler) CtxLogger {
+	l.level = level
+	return l
+}
+
+// See [Logger.Depth]
+func (l CtxLogger) Depth(depth int) CtxLogger {
+	l.depth = depth
+	return l
+}
+
+// See [Logger.With]
+func (l CtxLogger) With(args ...any) CtxLogger {
+	l.h = l.h.with(Segment(args...))
+	return l
+}
+
+// See [Logger.WithScope]
+func (l CtxLogger) WithScope(name string) CtxLogger {
+	l.h = l.h.withScope(name)
+	return l
 }
 
 // See [Logger.Msg]
@@ -69,20 +95,4 @@ func (l CtxLogger) Fmt(ctx context.Context, msg string, err error, args ...any) 
 	}
 
 	return msg, err
-}
-
-// See [Logger.Level]
-func (l CtxLogger) Level(level slog.Leveler) CtxLogger {
-	return CtxLogger{
-		h:     l.h,
-		level: level,
-	}
-}
-
-// See [Logger.With]
-func (l CtxLogger) With(args ...any) CtxLogger {
-	return CtxLogger{
-		h:     l.h.with(Segment(args...)),
-		level: l.level,
-	}
 }

@@ -1,6 +1,11 @@
 # logf
 Structured logging with string interpolation in Go
 
+Alternatives to this kind of string interpolation/formatting:
+- package `fmt`
+- package `template`
+
+
 ## Goals
 - Explore `x/exp/slog`
 - Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing. Still, sometimes a small API with formatting is nice to use. `logf` is an experiment in string interpolation sugar.
@@ -124,6 +129,28 @@ Log.With( "x:y ratio", 2 ).Msg( `What a funny ratio: {x\:y ratio}!` )
 	-> msg="What a funny ratio: 2!"
 ```
 
-## Yet unsolved problems:
-- Precompiling messages (as a compiler might with language level fstrings) would be a bit more performant, and more straightforward about escaping.
-- `sync.Pool` objects don't shrink in size, the mem pinning behavior is simple and workable. (sort of a general question with `sync.Pool`).
+## Handler Composition
+In the weeds: `logf` Handlers rely on wrapped `slog.Handlers` for as much state management as possible.
+Nothing presumed to exist in the wrapped `slog.Handler` is visible in the `logf.Handler`
+
+
+### Scope and composition
+`logf.Handler` doesn't track nested scoping. This is a useful property when interpolating.
+Consider:
+
+```
+h := slog.NewTextHandler(os.Stderr)
+h.WithScope("outer").With("x", 1)
+
+... at considerable distance ...
+
+log := logf.New( Using.Handler(h))
+log = log.WithScope("inner").With("x",2)
+```
+
+## Etc:
+
+- The ergonomics of in-situ string interpolation, where the interpolation target is named inside of a string, is explored in other languages (to my mind Python's f' strings might be the most compelling example). There are proposals for Go: https://github.com/golang/go/issues/34174, https://github.com/golang/go/issues/50554. This package doesn't capture variable names as interpolation targets, and it doesn't explore precompiling interpolation strings. What would change with some hypothetical language-level gadgetry? Matching arguments from logger or context scope to keyed interpolations is a runtime operation. Generating an interpolation dict could be compile time. One notable thing might be, at compile time, limiting key strings to valid variable names - escaping around this requires some runtime work.
+
+- `sync.Pool` objects don't shrink in capacity; the mem pinning behavior is simple and workable. This is sort of a general question with `sync.Pool`. This package uses pooled `splicers`; they can pin more than they use, they can't grow very large.
+

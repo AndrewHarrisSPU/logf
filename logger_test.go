@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"strings"
 	"sync"
@@ -12,6 +13,25 @@ import (
 
 	"golang.org/x/exp/slog"
 )
+
+func TestDepth(t *testing.T) {
+	log, want := substringTestLogger(t, Using.Source)
+	fn := func() {
+		log.Depth(1).Msg("where am I")
+	}
+
+	fn()
+	want("logger_test.go:20")
+
+	fn()
+	want("logger_test.go:20")
+
+	func() { fn() }()
+	want("logger_test.go:20")
+
+	func() { func() { log.Depth(2).Msg("how deep am I") }() }()
+	want("logger_test.go:32")
+}
 
 // test modes of failure for malformed logging calls
 func TestMalformed(t *testing.T) {
@@ -91,28 +111,37 @@ func TestEscaping(t *testing.T) {
 
 	// Needs JSON Handler at the moment
 	log.Err("👩‍🦰", errors.New("🛸"))
-	want("👩‍🦰")
+	want("👩‍🦰: 🛸")
 }
 
-// test error interpolation/wrapping behaviors
-func TestLoggerErr(t *testing.T) {
-	log, want := substringTestLogger(t)
+func TestFmt(t *testing.T) {
+	log := New(Using.Writer(io.Discard))
+	msg, err := log.Fmt("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
+	if msg != "0 <- 1 -> 2" {
+		t.Errorf("expected 0 <-1 -> 2, got %s", msg)
+	}
+	if err != nil {
+		t.Errorf("expected nil err: %s", err.Error())
+	}
 
 	reason := errors.New("reason")
-	log.Err("more info", reason)
-	want("more info: reason")
-
-	msg, err := log.Fmt("more info", reason)
-	log.Msg(msg)
-	want("more info: reason")
-
-	log.Err("", err)
-	want("more info: reason")
-
+	msg, err = log.Fmt("more info", reason)
+	if msg != err.Error() {
+		t.Errorf("want equivalence: got msg %s, err %s", msg, err.Error())
+	}
 	if ok := errors.Is(err, reason); !ok {
 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
 	}
 }
+
+// test error interpolation/wrapping behaviors
+// func TestLoggerErr(t *testing.T) {
+// 	log, want := substringTestLogger(t)
+
+// 	reason := errors.New("reason")
+// 	log.Err("more info", reason)
+// 	want("more info: reason")
+// }
 
 func TestLoggerGroup(t *testing.T) {
 	log, want := substringTestLogger(t)
@@ -155,19 +184,6 @@ func TestScope(t *testing.T) {
 	log = log.WithScope("files").With("x", true).WithScope("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
-}
-
-func TestDepth(t *testing.T) {
-	log, want := substringTestLogger(t, Using.Source)
-	fn := func() {
-		log.Depth(1).Msg("where am I")
-	}
-
-	fn()
-	want("logger_test.go:163")
-
-	fn()
-	want("logger_test.go:163")
 }
 
 // spoofy types to test LogValuer
@@ -247,6 +263,7 @@ func TestLoggerKinds(t *testing.T) {
 // test outputs agains canonical slog output
 // diagnostically, not sharp but broad
 // covers Logger and CtxLogger against slog
+// TODO: WithScope?
 func TestDiff(t *testing.T) {
 	f := struct {
 		msg  string

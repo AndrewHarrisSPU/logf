@@ -12,7 +12,6 @@ import (
 // When used with another logger API (e.g., [slog.Logger]) only {keyed} interpolation is possible.
 //
 // Handler is not an encoder, and forwards records to aonther slog.Handler for that purpose.
-// Whiile any slog.Handler may be an used as an encoder, Handler is unaware of Attr segments held by its encoder.
 type Handler struct {
 	seg    []Attr
 	prefix string
@@ -54,10 +53,11 @@ func (h *Handler) WithScope(name string) slog.Handler {
 }
 
 func (h *Handler) with(seg []Attr) *Handler {
-	pseg := scopeSegment(h.prefix, seg)
+	scopedSeg := scopeSegment(h.prefix, seg)
 
 	return &Handler{
-		seg:       concat(h.seg, pseg),
+		seg:       concat(h.seg, scopedSeg),
+		prefix:    h.prefix,
 		ref:       h.ref,
 		enc:       h.enc.With(seg),
 		addSource: h.addSource,

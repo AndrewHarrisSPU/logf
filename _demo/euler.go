@@ -14,7 +14,7 @@ type gopher struct {
 
 func newGopher(log logf.Logger, i uint) gopher {
 	return gopher{
-		log: log.With( ".", "gopher", "id", i ),
+		log: log.With(".", "gopher", "id", i),
 	}
 }
 
