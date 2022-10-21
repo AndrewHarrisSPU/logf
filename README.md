@@ -1,14 +1,27 @@
 # logf
-Structured logging with string interpolation in Go
-
-Alternatives to this kind of string interpolation/formatting:
-- package `fmt`
-- package `template`
-
+Structured logging with string interpolation in Go.
 
 ## Goals
-- Explore `x/exp/slog`
-- Structured logging is motivated by machine-parsable logging, and optimizes for machine readability. It's a good thing. Still, sometimes a small API with formatting is nice to use. `logf` is an experiment in string interpolation sugar.
+- Explore `x/exp/slog` with `Handler`ware that doesn't serialize a `Record`, but passes it to another `Handler`
+- Explore string interpolation.
+
+## Outcomes
+
+### Performance:
+- Low count of allocation calls is possible. Pooling interpolation dictionaries means not allocating a new map, just reusing an empty one. (Notably, Go map capacity doesn't shrink when elements are deleted.)
+- While the count of allocations is low, the size of allcations is relatively large.
+- A message string must be read to discover interpolation sites, causing some overhead that is always payed. In benchmarks, this is about 1/10th of the cost of the cost of logging a record.
+- Each interpolation site adds to the cost of handling a `Record`. Each interpolation is about 1/5th the cost of a `Record` with no interpolation.
+
+## Opinions That May be Wrong
+
+Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.
+
+- String interpolation is worth some allocation.
+- Munging of small collections, with `Segment`
+- Rather than many levels, store level in the `Logger`.
+- Contexts store `[]Attr` segments. Contexts are either persistent, and handled with `With`, or transient, and handled by a `CtxLogger`.
+- Configuration uses `Using.X` struct.
 
 ## What's where
 
@@ -23,23 +36,7 @@ Alternatives to this kind of string interpolation/formatting:
 |`splicer2.go`| message scan |
 |`splicer3.go`| interpolate and write |
 |`testutil.go`| testing gadgets |
-|`text.go`| interpolation buffer ops|
 |`using.go`| configuration via Options|
-
-## TODO
-- Fix source depth
-- Benchmarking - time and allocations are possible, but are there other useful metrics?
-   Size of pool (how big is a splicer relative to just a byte buffer?)
-
-## Opinions That May be Wrong
-
-Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.
-
-- String interpolation is worth some allocation.
-- Munging of small collections, with `Segment`
-- Rather than many levels, store level in the `Logger`.
-- Contexts store `[]Attr` segments. Contexts are either persistent, and handled with `With`, or transient, and handled by a `CtxLogger`.
-- Configuration uses `Using.X` struct.
 
 ## Interpolation
 
@@ -150,7 +147,11 @@ log = log.WithScope("inner").With("x",2)
 
 ## Etc:
 
-- The ergonomics of in-situ string interpolation, where the interpolation target is named inside of a string, is explored in other languages (to my mind Python's f' strings might be the most compelling example). There are proposals for Go: https://github.com/golang/go/issues/34174, https://github.com/golang/go/issues/50554. This package doesn't capture variable names as interpolation targets, and it doesn't explore precompiling interpolation strings. What would change with some hypothetical language-level gadgetry? Matching arguments from logger or context scope to keyed interpolations is a runtime operation. Generating an interpolation dict could be compile time. One notable thing might be, at compile time, limiting key strings to valid variable names - escaping around this requires some runtime work.
+- The ergonomics of in-situ string interpolation, where the interpolation target is named inside of a string, is explored in other languages (to my mind Python's f' strings might be the most compelling example).
+
+There are proposals for Go: https://github.com/golang/go/issues/34174, https://github.com/golang/go/issues/50554. This package doesn't capture variable names as interpolation targets, and it doesn't explore precompiling interpolation strings.
+
+What would change with some hypothetical language-level gadgetry? Matching arguments from logger or context scope to keyed interpolations is a runtime operation. Generating an interpolation dictionary could be a compile time operation. One notable thing might be, at compile time, limiting key strings to valid variable names - escaping around this requires some runtime work.
 
 - `sync.Pool` objects don't shrink in capacity; the mem pinning behavior is simple and workable. This is sort of a general question with `sync.Pool`. This package uses pooled `splicers`; they can pin more than they use, they can't grow very large.
 

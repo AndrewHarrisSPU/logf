@@ -9,17 +9,17 @@ import (
 
 type segmentKey struct{}
 
-// A CtxLogger demands contexts for logging calls.
+// A LoggerCtx demands contexts for logging calls.
 // It's a better choice if contexts carry transient segments of Attrs.
-type CtxLogger struct {
+type LoggerCtx struct {
 	h     *Handler
 	level slog.Leveler
 	depth int
 }
 
-// Contextual returns a CtxLogger that is otherwise identical to the Logger
-func (l Logger) Contextual() CtxLogger {
-	return CtxLogger{
+// Contextual returns a LoggerCtx that is otherwise identical to the Logger
+func (l Logger) Contextual() LoggerCtx {
+	return LoggerCtx{
 		h:     l.h,
 		level: l.level,
 		depth: l.depth,
@@ -27,31 +27,31 @@ func (l Logger) Contextual() CtxLogger {
 }
 
 // See [Logger.Level]
-func (l CtxLogger) Level(level slog.Leveler) CtxLogger {
+func (l LoggerCtx) Level(level slog.Leveler) LoggerCtx {
 	l.level = level
 	return l
 }
 
 // See [Logger.Depth]
-func (l CtxLogger) Depth(depth int) CtxLogger {
+func (l LoggerCtx) Depth(depth int) LoggerCtx {
 	l.depth = depth
 	return l
 }
 
 // See [Logger.With]
-func (l CtxLogger) With(args ...any) CtxLogger {
-	l.h = l.h.with(Segment(args...))
+func (l LoggerCtx) With(args ...any) LoggerCtx {
+	l.h = l.h.withAttrs(Segment(args...))
 	return l
 }
 
 // See [Logger.WithScope]
-func (l CtxLogger) WithScope(name string) CtxLogger {
-	l.h = l.h.withScope(name)
+func (l LoggerCtx) WithGroup(name string) LoggerCtx {
+	l.h = l.h.withGroup(name)
 	return l
 }
 
 // See [Logger.Msg]
-func (l CtxLogger) Msg(ctx context.Context, msg string, args ...any) {
+func (l LoggerCtx) Msg(ctx context.Context, msg string, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
 	}
@@ -65,7 +65,7 @@ func (l CtxLogger) Msg(ctx context.Context, msg string, args ...any) {
 }
 
 // See [Logger.Err]
-func (l CtxLogger) Err(ctx context.Context, msg string, err error, args ...any) {
+func (l LoggerCtx) Err(ctx context.Context, msg string, err error, args ...any) {
 	if l.level.Level() < l.h.ref.Level() {
 		return
 	}
@@ -79,7 +79,7 @@ func (l CtxLogger) Err(ctx context.Context, msg string, err error, args ...any) 
 }
 
 // See [Logger.Fmt]
-func (l CtxLogger) Fmt(ctx context.Context, msg string, err error, args ...any) (string, error) {
+func (l LoggerCtx) Fmt(ctx context.Context, msg string, err error, args ...any) (string, error) {
 	s := newSplicer()
 	defer s.free()
 

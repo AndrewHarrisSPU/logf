@@ -1,5 +1,6 @@
 package logf_test
 
+/*
 import (
 	"errors"
 	"fmt"
@@ -10,7 +11,7 @@ import (
 )
 
 func exampleLogger() logf.Logger {
-	return logf.New(logf.Using.Minimal(false, false))
+	return logf.New()
 }
 
 func Example() {
@@ -69,39 +70,39 @@ func exampleWriter() (*strings.Builder, func()) {
 //
 // Fortunately, a `logf.Handler` does not see any `Attr`s or scope set by the `slog.Handler` it wraps.
 // There's no need account for these scopes in interpolation symbols.
-func ExampleLogger_WithScope() {
-	w, trim := exampleWriter()
+func ExampleLogger_WithGroup() {
+	w, put := exampleWriter()
 
 	// first a slog.Handler with "outer" scoped x: 1
 	sl := slog.New(slog.NewTextHandler(w))
-	sl = sl.WithScope("outer").With("x", 1)
+	sl = sl.WithGroup("outer").With("x", 1)
 
 	// next, a logf.Logger with "inner" scoped x: 2
 	log := logf.New(logf.Using.Handler(sl.Handler()))
-	log = log.WithScope("inner").With("x", 2)
+	log = log.WithGroup("inner").With("x", 2)
 
 	// outer scope is not visible:
 	log.Msg("{outer.x}")
-	trim()
+	put()
 
 	// inner scope is not nested:
 	log.Msg("{outer.inner.x}")
-	trim()
+	put()
 
 	// inner scope is directly visible:
 	log.Msg("{inner.x}")
-	trim()
+	put()
 
 	// setting a further scope:
-	log = log.WithScope("local").With("x", 3)
+	log = log.WithGroup("local").With("x", 3)
 
 	// inner scope:
 	log.Msg("{inner.x}")
-	trim()
+	put()
 
 	// local scope:
 	log.Msg("{inner.local.x}")
-	trim()
+	put()
 
 	// Output:
 	// msg=!missing-attr outer·x=1 outer·inner·x=2
@@ -110,3 +111,4 @@ func ExampleLogger_WithScope() {
 	// msg=2 outer·x=1 outer·inner·x=2 outer·inner·local·x=3
 	// msg=3 outer·x=1 outer·inner·x=2 outer·inner·local·x=3
 }
+*/

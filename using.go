@@ -27,14 +27,6 @@ var Using struct {
 	// any handler
 	Handler optionFunc[slog.Handler]
 
-	// minimal encoder
-	// layout is time layout
-	// elapsed hints to use elapsed time rather than clock time
-	// export hints to use
-	//
-	// Minimal also observes io.Writer, slog.Leveler, and source options.
-	Minimal func(elapsed, export bool) option[slog.Handler]
-
 	// os pipes
 	Stdout option[io.Writer]
 	Stderr option[io.Writer]
@@ -58,7 +50,6 @@ func init() {
 	Using.Handler = usingHandler
 	Using.Level = usingLevel
 	Using.Source = usingSource
-	Using.Minimal = usingMinimal // see minimal.go
 }
 
 func usingWriter(w io.Writer) option[io.Writer] {

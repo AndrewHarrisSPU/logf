@@ -39,14 +39,14 @@ func (l Logger) Depth(depth int) Logger {
 // With extends the structure held in the Logger.
 // Arguments are munged through Segment.
 func (l Logger) With(args ...any) Logger {
-	l.h = l.h.with(Segment(args...))
+	l.h = l.h.withAttrs(Segment(args...))
 	return l
 }
 
 // WithScope scopes future keys provided to [Logger.With] by prefixing their keys with `name`.
 // There are some subtle behaviors when interpolating scopes.
-func (l Logger) WithScope(name string) Logger {
-	l.h = l.h.withScope(name)
+func (l Logger) WithGroup(name string) Logger {
+	l.h = l.h.withGroup(name)
 	return l
 }
 
@@ -100,7 +100,6 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 
 	args = s.scan(msg, args)
 	s.join(l.h.seg, nil, args)
-
 	s.interpolate(msg)
 
 	if err != nil && len(msg) > 0 {
@@ -114,17 +113,26 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	return msg, err
 }
 
-// Print is formats and interpolates msg using args.
-// The result is passed to `println`.
-func Print(msg string, args ...any) {
+func (l Logger) Print(msg string, args ...any) {
+	if l.level.Level() < Print.Level.Level() {
+		return
+	}
+
 	s := newSplicer()
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(nil, nil, args)
-	s.interpolate(msg)
+	s.join(l.h.seg, nil, args)
 
-	println(s.msg())
+	// s.interpolate(msg)
+
+	var depth int
+	if l.h.Enabled(-1) {
+		// increase depth
+		// get exports from splicer
+	}
+
+	pkgPrinter.print(s, msg, depth, l.h.seg)
 }
 
 // SEGMENT
@@ -158,10 +166,13 @@ func Segment(args ...any) (seg []Attr) {
 				seg = append(seg, ctxSeg...)
 			}
 			args = args[1:]
+		case error:
+			seg = append(seg, slog.String("err", arg.Error()))
+			args = args[1:]
 		case Logger:
 			seg = append(seg, arg.h.seg...)
 			args = args[1:]
-		case CtxLogger:
+		case LoggerCtx:
 			seg = append(seg, arg.h.seg...)
 			args = args[1:]
 		case *Handler:

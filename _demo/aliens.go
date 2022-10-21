@@ -14,7 +14,7 @@ import (
 )
 
 var space string = "     "
-var beams string = " *~- "
+var beams string = ":-~- "
 var width int = len(beams) * 10
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 	for i := 0; i < width; i++ {
 		lpad := strings.Repeat(space, 10)[:i]
 		rpad := strings.Repeat(beams, 10)[:width-i]
-		progress := (100.0 * i) / (1.0 * width)
+		progress := (100 * float64(i)) / float64(width)
 
 		<-time.NewTimer(40 * time.Millisecond).C
 		log.Err("{}{Scully}{}", ufo, lpad, rpad)
@@ -58,7 +58,11 @@ func (h *spinHandler) Enabled(level slog.Level) bool {
 	return h.level >= level
 }
 
-func (h *spinHandler) With([]slog.Attr) slog.Handler {
+func (h *spinHandler) WithAttrs([]slog.Attr) slog.Handler {
+	return h
+}
+
+func (h *spinHandler) WithGroup(name string) slog.Handler {
 	return h
 }
 
@@ -69,14 +73,14 @@ func (h *spinHandler) Handle(r slog.Record) error {
 	h.clearLine()
 	h.write(xStore)
 
-	if r.Level() <= h.level {
+	if r.Level <= h.level {
 		h.clearNextLine = true
 	}
 
 	h.elapsed()
 
 	h.write(" ")
-	h.write(r.Message())
+	h.write(r.Message)
 
 	h.write("\n")
 	return nil

@@ -230,13 +230,13 @@ func (s *splicer) writeError(err error) {
 }
 
 func (s *splicer) writeGroup(as []Attr) {
-	next := byte('[')
+	next := byte('{')
 	for _, a := range as {
 		s.writeByte(next)
 		s.writeString(a.Key)
-		s.writeByte('=')
+		s.writeByte(':')
 		s.writeValueNoVerb(a.Value)
 		next = ' '
 	}
-	s.writeByte(']')
+	s.writeByte('}')
 }

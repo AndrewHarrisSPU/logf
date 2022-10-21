@@ -159,29 +159,29 @@ func TestLoggerGroup(t *testing.T) {
 
 	// raw
 	log.Msg("{} {first}", agents, "first", "1?")
-	want(`msg="[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]] 1?"`)
+	want(`msg="{1:{first:Fox last:Mulder} 2:{first:Dana last:Scully}} 1?"`)
 }
 
-func TestScope(t *testing.T) {
+func TestWithGroup(t *testing.T) {
 	log, want := substringTestLogger(t)
 
 	// one scope
-	mulder := log.WithScope("agent").With("first", "Fox", "last", "Mulder")
+	mulder := log.WithGroup("agent").With("first", "Fox", "last", "Mulder")
 	mulder.Msg("Hi, {agent.last}")
 	want("Hi, Mulder")
 
 	// another scope
-	files := log.WithScope("files").With("x", true)
+	files := log.WithGroup("files").With("x", true)
 	files.Msg("{files.x}")
 	want("msg=true")
 
 	// two scopes, and a group
-	log = log.WithScope("files").WithScope("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = log.WithGroup("files").WithGroup("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 
 	// branching in scope
-	log = log.WithScope("files").With("x", true).WithScope("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = log.WithGroup("files").With("x", true).WithGroup("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }
@@ -242,7 +242,7 @@ func TestLoggerKinds(t *testing.T) {
 		{struct{}{}, "", "msg={}"},
 
 		// group
-		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", "msg=\"[A=1 B=2]\""},
+		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", "msg=\"{A:1 B:2}\""},
 
 		// LogValuer
 		{spoof0{}, "", "msg=spoof"},

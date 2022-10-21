@@ -47,12 +47,12 @@ func (*discardSink) Handle(slog.Record) error {
 	return nil
 }
 
-func (d *discardSink) With(as []Attr) slog.Handler {
+func (d *discardSink) WithAttrs(as []Attr) slog.Handler {
 	return &discardSink{concat(d.as, as)}
 }
 
 // TODO
-func (d *discardSink) WithScope(string) slog.Handler {
+func (d *discardSink) WithGroup(string) slog.Handler {
 	return d
 }
 
@@ -97,9 +97,9 @@ type diffLogger struct {
 	level            *slog.AtomicLevel
 	fbuf, sbuf, cbuf *bytes.Buffer
 	f                Logger
-	c                CtxLogger
+	c                LoggerCtx
 	ctx              context.Context
-	s                *slog.Logger
+	s                slog.Logger
 }
 
 func (d *diffLogger) With(args ...any) *diffLogger {

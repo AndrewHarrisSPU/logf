@@ -23,7 +23,7 @@ func BenchmarkLoggerSize(b *testing.B) {
 }
 
 var globalLog Logger
-var globalSlog *slog.Logger
+var globalSlog slog.Logger
 
 func benchLogfInitManual(b *testing.B) {
 	b.ReportAllocs()
@@ -101,7 +101,7 @@ func BenchmarkAttrs(b *testing.B) {
 	}{
 		// {"async discard", newAsyncHandler()},
 		// {"fastText discard", newFastTextHandler(io.Discard)},
-		// {"Text discard", slog.NewTextHandler(io.Discard)},
+		{"Text discard", slog.NewTextHandler(io.Discard)},
 		{"JSON discard", slog.HandlerOptions{AddSource: false}.NewJSONHandler(io.Discard)},
 		{"logf discard", NewHandler(Using.JSON, Using.Writer(io.Discard))},
 	} {
@@ -111,6 +111,12 @@ func BenchmarkAttrs(b *testing.B) {
 				name string
 				f    func()
 			}{
+				{
+					"0 args",
+					func() {
+						logger.LogAttrs(slog.InfoLevel, TestMessage)
+					},
+				},
 				{
 					// The number should match nAttrsInline in slog/record.go.
 					// This should exercise the code path where no allocations
@@ -205,6 +211,63 @@ func BenchmarkAttrs(b *testing.B) {
 	}
 }
 
+func BenchmarkSplicer(b *testing.B) {
+	b.Run("splicer init/free", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			s := newSplicer()
+			defer s.free()
+		}
+	})
+
+	b.Run("splicer scan", func(b *testing.B) {
+		s := newSplicer()
+		defer s.free()
+
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			s.scan(TestMessage, nil)
+		}
+	})
+
+	b.Run("splicer join 5 attrs 5 args", func(b *testing.B) {
+		s := newSplicer()
+		defer s.free()
+
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			s.scan(TestMessage, nil)
+			s.join(TestAttrs, nil, TestAny5)
+		}
+	})
+
+	b.Run("splicer interpolate 5 unkeyed", func(b *testing.B) {
+		s := newSplicer()
+		defer s.free()
+
+		s.scan("{} {} {} {} {}", TestAny5)
+		s.join(nil, nil, TestAny5)
+
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			s.interpolate("{} {} {} {} {}")
+		}
+	})
+
+	b.Run("splicer interpolate 5 keyed", func(b *testing.B) {
+		s := newSplicer()
+		defer s.free()
+
+		s.scan("{string} {status} {duration} {time} {error}", nil)
+		s.join(TestAttrs, nil, nil)
+
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			s.interpolate("{string} {status} {duration} {time} {error}")
+		}
+	})
+}
+
 func BenchmarkInterpolation(b *testing.B) {
 	// w := os.Stdout
 	w := io.Discard
@@ -222,18 +285,18 @@ func BenchmarkInterpolation(b *testing.B) {
 		label string
 		fn    func()
 	}{
-		// {
-		// 	label: "0 interp, 5 args",
-		// 	fn: func(){ log.Msg("", TestAny5...)},
-		// },
-		// {
-		// 	label: "slog, 5 args",
-		// 	fn: func(){ slogger.Info( "", TestAny5...)},
-		// },
-		// {
-		// 	label: "5 unkeyed, 5 args",
-		// 	fn: func(){ log.Msg("{} {} {} {} {}", TestAny5...)},
-		// },
+		{
+			label: "0 interp, 5 args",
+			fn:    func() { log.Msg("", TestAny5...) },
+		},
+		{
+			label: "slog, 5 args",
+			fn:    func() { slogger.Info("", TestAny5...) },
+		},
+		{
+			label: "5 unkeyed, 5 args",
+			fn:    func() { log.Msg("{} {} {} {} {}", TestAny5...) },
+		},
 		{
 			label: "0 interp, with 5",
 			fn:    func() { log5.Msg(TestMessage) },
@@ -249,6 +312,10 @@ func BenchmarkInterpolation(b *testing.B) {
 		{
 			label: "time interp, with 5",
 			fn:    func() { log5.Msg("{time}") },
+		},
+		{
+			label: "all interp, arg 5",
+			fn:    func() { log.Msg("{string} {status} {duration} {time} {error}", TestAny5...) },
 		},
 		{
 			label: "all interp, with 5",

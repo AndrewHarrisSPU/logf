@@ -43,33 +43,33 @@ func (h *Handler) Enabled(level slog.Level) bool {
 }
 
 // With extends the segment of [Attr]s associated with a [Handler]
-func (h *Handler) With(seg []Attr) slog.Handler {
-	return h.with(seg)
+func (h *Handler) WithAttrs(seg []Attr) slog.Handler {
+	return h.withAttrs(seg)
 }
 
 // WithScope opens a namespace. Every subsequent Attr key is prefixed with the name.
-func (h *Handler) WithScope(name string) slog.Handler {
-	return h.withScope(name)
+func (h *Handler) WithGroup(name string) slog.Handler {
+	return h.withGroup(name)
 }
 
-func (h *Handler) with(seg []Attr) *Handler {
+func (h *Handler) withAttrs(seg []Attr) *Handler {
 	scopedSeg := scopeSegment(h.prefix, seg)
 
 	return &Handler{
 		seg:       concat(h.seg, scopedSeg),
 		prefix:    h.prefix,
 		ref:       h.ref,
-		enc:       h.enc.With(seg),
+		enc:       h.enc.WithAttrs(seg),
 		addSource: h.addSource,
 	}
 }
 
-func (h *Handler) withScope(name string) *Handler {
+func (h *Handler) withGroup(name string) *Handler {
 	return &Handler{
 		seg:       h.seg,
 		prefix:    h.prefix + name + ".",
 		ref:       h.ref,
-		enc:       h.enc.WithScope(name),
+		enc:       h.enc.WithGroup(name),
 		addSource: h.addSource,
 	}
 }
@@ -80,26 +80,12 @@ func (h *Handler) Handle(r slog.Record) error {
 	s := newSplicer()
 	defer s.free()
 
-	s.scan(r.Message(), nil)
+	s.scan(r.Message, nil)
 	s.join(h.seg, nil, nil)
+	s.interpolate(r.Message)
+	r.Message = s.msg()
 
-	r.Attrs(func(a Attr) {
-		s.match(a)
-	})
-
-	var depth int
-	if h.addSource {
-		depth = 5
-	}
-
-	s.interpolate(r.Message())
-
-	r2 := slog.NewRecord(r.Time(), r.Level(), s.msg(), depth)
-	r.Attrs(func(a Attr) {
-		r2.AddAttrs(a)
-	})
-
-	return h.enc.Handle(r2)
+	return h.enc.Handle(r)
 }
 
 func (h *Handler) handle(
@@ -118,7 +104,7 @@ func (h *Handler) handle(
 		depth += 5
 	}
 
-	r := slog.NewRecord(time.Now(), level, s.msg(), depth)
+	r := slog.NewRecord(time.Now(), level, s.msg(), depth, nil)
 	r.AddAttrs(s.export...)
 
 	return h.enc.Handle(r)

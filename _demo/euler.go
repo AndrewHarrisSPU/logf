@@ -4,7 +4,7 @@ import (
 	"flag"
 
 	"github.com/AndrewHarrisSPU/logf"
-	"golang.org/x/exp/slog"
+	// "golang.org/x/exp/slog"
 )
 
 type gopher struct {
@@ -22,9 +22,9 @@ func (g gopher) add(ns <-chan uint, sums chan<- uint) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			g.log.Level(logf.DEBUG).Msg("{.} {id}", g.sum)
+			// g.log.Level(logf.DEBUG).Print("{.} {id}", g.sum)
 		}
-		g.log.Level(logf.INFO+1).Msg("{.} {id} done: {}", g.sum)
+		g.log.Level(logf.INFO+1).Print("{.} {id} done: {}", g.sum)
 		sums <- g.sum
 	}()
 }
@@ -37,12 +37,14 @@ var structured = flag.Bool("structured", false, "emit structure")
 func main() {
 	flag.Parse()
 
-	cfg := []logf.Option{
-		logf.Using.Minimal(true, *structured),
-		logf.Using.Level(slog.Level(*verbosity)),
-	}
+	// cfg := []logf.Option{
+	// 	logf.Using.Minimal(true, *structured),
+	// 	logf.Using.Level(slog.Level(*verbosity)),
+	// }
 
-	log := logf.New(cfg...).With(".", "Eulerian Gophers")
+	// log := logf.New(cfg...).With(".", "Eulerian Gophers")
+
+	log := logf.New().With(".", "Eulerian Gophers")
 
 	ns, sums := make(chan uint), make(chan uint)
 
@@ -65,5 +67,5 @@ func main() {
 		total += <-sums
 	}
 
-	log.Level(logf.INFO+2).Msg("{.} done: {}", total)
+	log.Level(logf.INFO+2).Print("{.} done: {}", total)
 }

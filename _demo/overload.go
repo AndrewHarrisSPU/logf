@@ -7,15 +7,18 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var print = logf.Print
+var print = logf.New().With("demo", "overload").Print
 
 type Agent struct {
-	First string `json:"first"`
-	Last  string `json:"last"`
+	First string
+	Last  string
 }
 
 func (a Agent) LogValue() slog.Value {
-	return slog.GroupValue([]slog.Attr{slog.String("first", a.First), slog.String("last", a.Last)}...)
+	return slog.GroupValue(
+		slog.String("first", a.First),
+		slog.String("last", a.Last),
+	)
 }
 
 func main() {
@@ -29,6 +32,4 @@ func main() {
 		first string
 		last  string
 	}{first: "Fox", last: "Mulder"})
-
-	print("{:%+v}", []string{"Fox", "Mulder"})
 }
