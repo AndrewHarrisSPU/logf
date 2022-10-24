@@ -12,8 +12,8 @@ type segmentKey struct{}
 // A LoggerCtx demands contexts for logging calls.
 // It's a better choice if contexts carry transient segments of Attrs.
 type LoggerCtx struct {
-	h     *Handler
-	level slog.Leveler
+	h     handler
+	level slog.Level
 	depth int
 }
 
@@ -27,7 +27,7 @@ func (l Logger) Contextual() LoggerCtx {
 }
 
 // See [Logger.Level]
-func (l LoggerCtx) Level(level slog.Leveler) LoggerCtx {
+func (l LoggerCtx) Level(level slog.Level) LoggerCtx {
 	l.level = level
 	return l
 }
@@ -44,15 +44,15 @@ func (l LoggerCtx) With(args ...any) LoggerCtx {
 	return l
 }
 
-// See [Logger.WithScope]
-func (l LoggerCtx) WithGroup(name string) LoggerCtx {
+// See [Logger.Scope]
+func (l LoggerCtx) Scope(name string) LoggerCtx {
 	l.h = l.h.withGroup(name)
 	return l
 }
 
 // See [Logger.Msg]
 func (l LoggerCtx) Msg(ctx context.Context, msg string, args ...any) {
-	if l.level.Level() < l.h.ref.Level() {
+	if l.level < l.h.level() {
 		return
 	}
 
@@ -60,13 +60,13 @@ func (l LoggerCtx) Msg(ctx context.Context, msg string, args ...any) {
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, ctx, args)
-	l.h.handle(s, l.level.Level(), msg, nil, 0)
+	s.join(l.h.attrs(), ctx, args)
+	l.h.handle(s, l.level.Level(), msg, nil, l.depth)
 }
 
 // See [Logger.Err]
 func (l LoggerCtx) Err(ctx context.Context, msg string, err error, args ...any) {
-	if l.level.Level() < l.h.ref.Level() {
+	if l.level < l.h.level() {
 		return
 	}
 
@@ -74,8 +74,8 @@ func (l LoggerCtx) Err(ctx context.Context, msg string, err error, args ...any) 
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, ctx, args)
-	l.h.handle(s, l.level.Level(), msg, err, 0)
+	s.join(l.h.attrs(), ctx, args)
+	l.h.handle(s, l.level.Level(), msg, err, l.depth)
 }
 
 // See [Logger.Fmt]
@@ -84,7 +84,7 @@ func (l LoggerCtx) Fmt(ctx context.Context, msg string, err error, args ...any) 
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, nil, args)
+	s.join(l.h.attrs(), nil, args)
 
 	s.interpolate(msg)
 

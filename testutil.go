@@ -7,9 +7,35 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/exp/slog"
 )
+
+type zeroTimeHandler struct {
+	h slog.Handler
+}
+
+func newZeroTimeHandler(h slog.Handler) slog.Handler {
+	return zeroTimeHandler{h}
+}
+
+func (z zeroTimeHandler) Enabled(level slog.Level) bool {
+	return z.h.Enabled(level)
+}
+
+func (z zeroTimeHandler) Handle(r slog.Record) error {
+	r.Time = time.Time{}
+	return z.h.Handle(r)
+}
+
+func (z zeroTimeHandler) WithAttrs(seg []Attr) slog.Handler {
+	return zeroTimeHandler{z.h.WithAttrs(seg)}
+}
+
+func (z zeroTimeHandler) WithGroup(name string) slog.Handler {
+	return zeroTimeHandler{z.h.WithGroup(name)}
+}
 
 // SUBSTRINGS
 
@@ -25,35 +51,10 @@ func substringTestLogger(t *testing.T, options ...Option) (Logger, func(string))
 		b.Reset()
 	}
 
-	return New(options...), wantFunc
-}
+	l := New(options...)
+	l.h.(*Handler).enc = zeroTimeHandler{l.h.(*Handler).enc}
 
-// DISCARD
-
-func setupDiscardLog() Logger {
-	d := discardSink{make([]Attr, 0)}
-	return New(Using.Handler(&d))
-}
-
-type discardSink struct {
-	as []Attr
-}
-
-func (*discardSink) Enabled(slog.Level) bool {
-	return true
-}
-
-func (*discardSink) Handle(slog.Record) error {
-	return nil
-}
-
-func (d *discardSink) WithAttrs(as []Attr) slog.Handler {
-	return &discardSink{concat(d.as, as)}
-}
-
-// TODO
-func (d *discardSink) WithGroup(string) slog.Handler {
-	return d
+	return l, wantFunc
 }
 
 // DIFF
@@ -72,7 +73,9 @@ func setupDiffLog() *diffLogger {
 		Using.Writer(d.fbuf),
 		Using.Level(d.level),
 		Using.Source,
-	)
+	).Depth(2)
+
+	d.f.h.(*Handler).enc = zeroTimeHandler{d.f.h.(*Handler).enc}
 
 	d.c = New(
 		Using.Writer(d.cbuf),
@@ -80,11 +83,19 @@ func setupDiffLog() *diffLogger {
 		Using.Source,
 	).Contextual()
 
+	d.c.h.(*Handler).enc = zeroTimeHandler{d.c.h.(*Handler).enc}
+
 	d.ctx = context.Background()
 
 	// slog options
 	slogOptions := slog.HandlerOptions{
 		AddSource: true,
+		ReplaceAttr: func(a Attr) Attr {
+			if a.Key == "time" {
+				a.Value = slog.TimeValue(time.Time{})
+			}
+			return a
+		},
 	}
 	d.s = slog.New(slogOptions.NewTextHandler(d.sbuf))
 
@@ -115,27 +126,9 @@ func (d *diffLogger) With(args ...any) *diffLogger {
 		sbuf:  new(bytes.Buffer),
 	}
 
-	// logf
-	d2.f = New(
-		Using.Writer(d2.fbuf),
-		Using.Level(d.level),
-		Using.Source,
-	).With(args...)
-
-	// logf contextual
-	d2.c = New(
-		Using.Writer(d2.cbuf),
-		Using.Level(d.level),
-		Using.Source,
-	).Contextual()
-
-	d2.ctx = context.WithValue(d.ctx, segmentKey{}, Segment(args...))
-
-	// slog
-	slogOptions := slog.HandlerOptions{
-		AddSource: true,
-	}
-	d2.s = slog.New(slogOptions.NewTextHandler(d2.sbuf)).With(args...)
+	d2.f = d.f.With(args...)
+	d2.c = d.c.With(args...)
+	d2.s = d.s.With(args...)
 
 	return d2
 }
@@ -160,13 +153,13 @@ func (d *diffLogger) Diff(t *testing.T, msg string, n int, args ...any) {
 	}
 
 	d.f.Level(level).Msg(imsg, args...)
-	fstr := stripTime(d.fbuf.String())
+	fstr := d.fbuf.String()
 
 	d.c.Level(level).Msg(d.ctx, imsg, args...)
-	cstr := stripTime(d.cbuf.String())
+	cstr := d.cbuf.String()
 
 	d.s.LogDepth(0, level, smsg, sargs...)
-	sstr := stripTime(d.sbuf.String())
+	sstr := d.sbuf.String()
 
 	if fstr != sstr {
 		t.Errorf("diff:\n\tlogf: %s\tslog: %s", fstr, sstr)

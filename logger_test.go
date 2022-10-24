@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"strings"
 	"sync"
@@ -17,20 +16,24 @@ import (
 func TestDepth(t *testing.T) {
 	log, want := substringTestLogger(t, Using.Source)
 	fn := func() {
-		log.Depth(1).Msg("where am I")
+		log.Msg("where am I")
 	}
 
 	fn()
-	want("logger_test.go:20")
+	want("logger_test.go:19")
 
 	fn()
-	want("logger_test.go:20")
+	want("logger_test.go:19")
 
 	func() { fn() }()
-	want("logger_test.go:20")
+	want("logger_test.go:19")
 
-	func() { func() { log.Depth(2).Msg("how deep am I") }() }()
-	want("logger_test.go:32")
+	func() {
+		func() {
+			log.Depth(1).Msg("how deep am I")
+		}()
+	}()
+	want("logger_test.go:34")
 }
 
 // test modes of failure for malformed logging calls
@@ -114,36 +117,27 @@ func TestEscaping(t *testing.T) {
 	want("👩‍🦰: 🛸")
 }
 
-func TestFmt(t *testing.T) {
-	log := New(Using.Writer(io.Discard))
-	msg, err := log.Fmt("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
-	if msg != "0 <- 1 -> 2" {
-		t.Errorf("expected 0 <-1 -> 2, got %s", msg)
-	}
-	if err != nil {
-		t.Errorf("expected nil err: %s", err.Error())
-	}
-
-	reason := errors.New("reason")
-	msg, err = log.Fmt("more info", reason)
-	if msg != err.Error() {
-		t.Errorf("want equivalence: got msg %s, err %s", msg, err.Error())
-	}
-	if ok := errors.Is(err, reason); !ok {
-		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
-	}
-}
-
-// test error interpolation/wrapping behaviors
-// func TestLoggerErr(t *testing.T) {
-// 	log, want := substringTestLogger(t)
+// func TestFmt(t *testing.T) {
+// 	log := New(Using.Writer(io.Discard))
+// 	msg, err := log.Fmt("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
+// 	if msg != "0 <- 1 -> 2" {
+// 		t.Errorf("expected 0 <-1 -> 2, got %s", msg)
+// 	}
+// 	if err != nil {
+// 		t.Errorf("expected nil err: %s", err.Error())
+// 	}
 
 // 	reason := errors.New("reason")
-// 	log.Err("more info", reason)
-// 	want("more info: reason")
+// 	msg, err = log.Fmt("more info", reason)
+// 	if msg != err.Error() {
+// 		t.Errorf("want equivalence: got msg %s, err %s", msg, err.Error())
+// 	}
+// 	if ok := errors.Is(err, reason); !ok {
+// 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
+// 	}
 // }
 
-func TestLoggerGroup(t *testing.T) {
+func TestLoggerGroups(t *testing.T) {
 	log, want := substringTestLogger(t)
 
 	// one group
@@ -162,26 +156,26 @@ func TestLoggerGroup(t *testing.T) {
 	want(`msg="{1:{first:Fox last:Mulder} 2:{first:Dana last:Scully}} 1?"`)
 }
 
-func TestWithGroup(t *testing.T) {
+func TestScope(t *testing.T) {
 	log, want := substringTestLogger(t)
 
 	// one scope
-	mulder := log.WithGroup("agent").With("first", "Fox", "last", "Mulder")
+	mulder := log.Label("agent").With("first", "Fox", "last", "Mulder")
 	mulder.Msg("Hi, {agent.last}")
 	want("Hi, Mulder")
 
 	// another scope
-	files := log.WithGroup("files").With("x", true)
+	files := log.Label("files").With("x", true)
 	files.Msg("{files.x}")
 	want("msg=true")
 
 	// two scopes, and a group
-	log = log.WithGroup("files").WithGroup("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = log.Label("files").Label("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 
 	// branching in scope
-	log = log.WithGroup("files").With("x", true).WithGroup("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = log.Label("files").With("x", true).Label("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }

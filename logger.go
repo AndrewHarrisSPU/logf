@@ -8,8 +8,8 @@ import (
 )
 
 type Logger struct {
-	h     *Handler
-	level slog.Leveler
+	h     handler
+	level slog.Level
 	depth int
 }
 
@@ -17,15 +17,22 @@ type Logger struct {
 
 // Pass options to New, get a Logger!
 func New(options ...Option) Logger {
-	return Logger{
-		h:     NewHandler(options...),
-		level: slog.InfoLevel,
+	cfg := makeConfig(options...)
+
+	var l Logger
+
+	if cfg.usePrinter {
+		l.h = newPrinter()
+	} else {
+		l.h = newHandler(cfg)
 	}
+
+	return l
 }
 
 // Level is intended for chaining calls, e.g.:
 // log.Level(INFO+1).Msg("") logs at INFO+1
-func (l Logger) Level(level slog.Leveler) Logger {
+func (l Logger) Level(level slog.Level) Logger {
 	l.level = level
 	return l
 }
@@ -43,9 +50,8 @@ func (l Logger) With(args ...any) Logger {
 	return l
 }
 
-// WithScope scopes future keys provided to [Logger.With] by prefixing their keys with `name`.
-// There are some subtle behaviors when interpolating scopes.
-func (l Logger) WithGroup(name string) Logger {
+// Label
+func (l Logger) Label(name string) Logger {
 	l.h = l.h.withGroup(name)
 	return l
 }
@@ -54,37 +60,29 @@ func (l Logger) WithGroup(name string) Logger {
 
 // Msg interpolates a message string, and logs it.
 func (l Logger) Msg(msg string, args ...any) {
-	if l.level.Level() < l.h.ref.Level() {
+	if l.level < l.h.level() {
 		return
-	}
-
-	if l.depth != 0 {
-		l.depth -= 2
 	}
 
 	s := newSplicer()
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, nil, args)
+	s.join(l.h.attrs(), nil, args)
 	l.h.handle(s, l.level.Level(), msg, nil, l.depth)
 }
 
 // Err logs a message, appending the error string to the message text.
 func (l Logger) Err(msg string, err error, args ...any) {
-	if l.level.Level() < l.h.ref.Level() {
+	if l.level < l.h.level() {
 		return
-	}
-
-	if l.depth != 0 {
-		l.depth -= 2
 	}
 
 	s := newSplicer()
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, nil, args)
+	s.join(l.h.attrs(), nil, args)
 	l.h.handle(s, l.level.Level(), msg, err, l.depth)
 }
 
@@ -99,7 +97,7 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	defer s.free()
 
 	args = s.scan(msg, args)
-	s.join(l.h.seg, nil, args)
+	s.join(l.h.attrs(), nil, args)
 	s.interpolate(msg)
 
 	if err != nil && len(msg) > 0 {
@@ -111,28 +109,6 @@ func (l Logger) Fmt(msg string, err error, args ...any) (string, error) {
 	}
 
 	return msg, err
-}
-
-func (l Logger) Print(msg string, args ...any) {
-	if l.level.Level() < Print.Level.Level() {
-		return
-	}
-
-	s := newSplicer()
-	defer s.free()
-
-	args = s.scan(msg, args)
-	s.join(l.h.seg, nil, args)
-
-	// s.interpolate(msg)
-
-	var depth int
-	if l.h.Enabled(-1) {
-		// increase depth
-		// get exports from splicer
-	}
-
-	pkgPrinter.print(s, msg, depth, l.h.seg)
 }
 
 // SEGMENT
@@ -155,6 +131,12 @@ func Segment(args ...any) (seg []Attr) {
 			}
 			seg = append(seg, NewAttr(arg, args[1]))
 			args = args[2:]
+		case slog.LogValuer:
+			v := arg.LogValue()
+			if v.Kind() == slog.GroupKind {
+				seg = append(seg, v.Group()...)
+			}
+			args = args[1:]
 		case Attr:
 			seg = append(seg, arg)
 			args = args[1:]
@@ -170,10 +152,10 @@ func Segment(args ...any) (seg []Attr) {
 			seg = append(seg, slog.String("err", arg.Error()))
 			args = args[1:]
 		case Logger:
-			seg = append(seg, arg.h.seg...)
+			seg = append(seg, arg.h.attrs()...)
 			args = args[1:]
 		case LoggerCtx:
-			seg = append(seg, arg.h.seg...)
+			seg = append(seg, arg.h.attrs()...)
 			args = args[1:]
 		case *Handler:
 			seg = append(seg, arg.seg...)

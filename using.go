@@ -103,20 +103,17 @@ type source struct{}
 // CONFIG
 
 type config struct {
-	w         io.Writer
-	h         slog.Handler
-	ref       slog.Leveler
-	addSource bool
+	w          io.Writer
+	h          slog.Handler
+	ref        slog.Leveler
+	addSource  bool
+	usePrinter bool
 }
 
 func makeConfig(options ...Option) (cfg config) {
-	// defaults
-	cfg.ref = INFO
-	cfg.w = os.Stdout
-
 	// These depend on other configurations,
 	// so evaluation is delayed
-	var oSlog Option = option[slog.TextHandler](usingText)
+	var oSlog Option
 	var oHandler option[slog.Handler]
 
 	// consume options
@@ -137,10 +134,31 @@ func makeConfig(options ...Option) (cfg config) {
 		}
 	}
 
+	// if no writer was set, and no handler defined
+	if cfg.w == nil && oHandler == nil && oSlog == nil {
+		cfg.usePrinter = true
+		cfg.addSource = Print.Source
+		cfg.ref = Print.Level
+		return
+	}
+
+	// use a specified writer
+	if cfg.w == nil {
+		cfg.w = os.Stdout
+	}
+
+	if cfg.ref == nil {
+		cfg.ref = INFO
+	}
+
 	// use a specified Handler
 	if oHandler != nil {
 		oHandler(&cfg)
 		return
+	}
+
+	if oSlog == nil {
+		oSlog = option[slog.TextHandler](usingText)
 	}
 
 	// otherwise, build a slog Handler

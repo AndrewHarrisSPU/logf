@@ -4,27 +4,37 @@ import (
 	"flag"
 
 	"github.com/AndrewHarrisSPU/logf"
-	// "golang.org/x/exp/slog"
+	"golang.org/x/exp/slog"
 )
 
 type gopher struct {
 	log logf.Logger
+	id  uint
 	sum uint
 }
 
 func newGopher(log logf.Logger, i uint) gopher {
 	return gopher{
-		log: log.With(".", "gopher", "id", i),
+		log: log.Label("gopher"),
+		id:  i,
+		sum: 0,
 	}
+}
+
+func (g gopher) LogValue() slog.Value {
+	return slog.GroupValue([]slog.Attr{
+		slog.Uint64("id", uint64(g.id)),
+		slog.Uint64("sum", uint64(g.sum)),
+	}...)
 }
 
 func (g gopher) add(ns <-chan uint, sums chan<- uint) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			// g.log.Level(logf.DEBUG).Print("{.} {id}", g.sum)
+			g.log.Level(logf.DEBUG).Msg("{id} {sum}", g)
 		}
-		g.log.Level(logf.INFO+1).Print("{.} {id} done: {}", g.sum)
+		g.log.Msg("{id}: {sum}", g)
 		sums <- g.sum
 	}()
 }
@@ -44,7 +54,7 @@ func main() {
 
 	// log := logf.New(cfg...).With(".", "Eulerian Gophers")
 
-	log := logf.New().With(".", "Eulerian Gophers")
+	log := logf.New().Label("Eulerian Gophers")
 
 	ns, sums := make(chan uint), make(chan uint)
 
@@ -67,5 +77,5 @@ func main() {
 		total += <-sums
 	}
 
-	log.Level(logf.INFO+2).Print("{.} done: {}", total)
+	log.Level(logf.INFO+2).Msg("sum: {}", total)
 }

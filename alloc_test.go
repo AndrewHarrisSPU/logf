@@ -109,7 +109,7 @@ func TestAllocKindsLogger(t *testing.T) {
 		{2, 2, 2, spoof2{}, "%10s"},
 	}
 
-	log := setupDiscardLog()
+	log := New(Using.Writer(io.Discard))
 
 	var argFns []func()
 	var withFns []func()
@@ -169,7 +169,7 @@ func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 }
 
 func TestAllocsGroups(t *testing.T) {
-	log := setupDiscardLog()
+	log := New(Using.Writer(io.Discard))
 
 	g := slog.Group("1", slog.String("roman", "i"))
 	log = log.With(g)

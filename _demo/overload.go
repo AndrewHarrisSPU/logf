@@ -7,7 +7,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var print = logf.New().With("demo", "overload").Print
+var print = logf.New().Label("overload")
 
 type Agent struct {
 	First string
@@ -16,19 +16,20 @@ type Agent struct {
 
 func (a Agent) LogValue() slog.Value {
 	return slog.GroupValue(
+		slog.String("", "Agent"),
 		slog.String("first", a.First),
 		slog.String("last", a.Last),
 	)
 }
 
 func main() {
-	print("Ya, it's possible to overload {}", "print")
-	print("pi is {:%.2f}", math.Pi)
+	print.Msg("Ya, it's possible to overload {}", "print")
+	print.Msg("pi is {:%.2f}", math.Pi)
 
 	mulder := Agent{"Fox", "Mulder"}
-	print("{}", mulder)
+	print.Msg("{}", mulder)
 
-	print("{:%+v}", struct {
+	print.Msg("{:%+v}", struct {
 		first string
 		last  string
 	}{first: "Fox", last: "Mulder"})

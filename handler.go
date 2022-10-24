@@ -44,34 +44,12 @@ func (h *Handler) Enabled(level slog.Level) bool {
 
 // With extends the segment of [Attr]s associated with a [Handler]
 func (h *Handler) WithAttrs(seg []Attr) slog.Handler {
-	return h.withAttrs(seg)
+	return h.withAttrs(seg).(*Handler)
 }
 
 // WithScope opens a namespace. Every subsequent Attr key is prefixed with the name.
 func (h *Handler) WithGroup(name string) slog.Handler {
-	return h.withGroup(name)
-}
-
-func (h *Handler) withAttrs(seg []Attr) *Handler {
-	scopedSeg := scopeSegment(h.prefix, seg)
-
-	return &Handler{
-		seg:       concat(h.seg, scopedSeg),
-		prefix:    h.prefix,
-		ref:       h.ref,
-		enc:       h.enc.WithAttrs(seg),
-		addSource: h.addSource,
-	}
-}
-
-func (h *Handler) withGroup(name string) *Handler {
-	return &Handler{
-		seg:       h.seg,
-		prefix:    h.prefix + name + ".",
-		ref:       h.ref,
-		enc:       h.enc.WithGroup(name),
-		addSource: h.addSource,
-	}
+	return h.withGroup(name).(*Handler)
 }
 
 // Handle performs interpolation on a [slog.Record]'s message
@@ -88,6 +66,46 @@ func (h *Handler) Handle(r slog.Record) error {
 	return h.enc.Handle(r)
 }
 
+// handler minor ...
+
+type handler interface {
+	handle(*splicer, slog.Level, string, error, int) error
+	withAttrs([]Attr) handler
+	withGroup(string) handler
+	attrs() []Attr
+	level() slog.Level
+}
+
+func (h *Handler) withAttrs(seg []Attr) handler {
+	scopedSeg := scopeSegment(h.prefix, seg)
+
+	return &Handler{
+		seg:       concat(h.seg, scopedSeg),
+		prefix:    h.prefix,
+		ref:       h.ref,
+		enc:       h.enc.WithAttrs(seg),
+		addSource: h.addSource,
+	}
+}
+
+func (h *Handler) withGroup(name string) handler {
+	return &Handler{
+		seg:       h.seg,
+		prefix:    h.prefix + name + ".",
+		ref:       h.ref,
+		enc:       h.enc.WithGroup(name),
+		addSource: h.addSource,
+	}
+}
+
+func (h *Handler) attrs() []Attr {
+	return h.seg
+}
+
+func (h *Handler) level() slog.Level {
+	return h.ref.Level()
+}
+
 func (h *Handler) handle(
 	s *splicer,
 	level slog.Level,
@@ -101,7 +119,9 @@ func (h *Handler) handle(
 	}
 
 	if h.addSource {
-		depth += 5
+		depth += 4
+	} else {
+		depth = 0
 	}
 
 	r := slog.NewRecord(time.Now(), level, s.msg(), depth, nil)
