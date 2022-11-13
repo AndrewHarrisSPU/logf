@@ -1,8 +1,12 @@
 package logf
 
 import (
-	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
+	"unicode/utf8"
 
 	"golang.org/x/exp/slog"
 )
@@ -16,6 +20,8 @@ const (
 )
 
 var missingAttrValue = slog.StringValue("!missing-attr")
+
+// LIFECYCLE
 
 // Splicers have a well-defined lifecycle per logging call:
 // 1. init
@@ -41,14 +47,16 @@ type splicer struct {
 	// also holds stack of keys when interpolating groups
 	scratch []byte
 
-	// holds ordered list of unkeyed arguments
-	list []any
-
 	// holds map of keyed interpolation symbols
 	dict map[string]slog.Value
 
+	// holds ordered list of unkeyed arguments
+	list []any
+
 	// holds ordered list of exported attrs
 	export []Attr
+
+	replace func(Attr) Attr
 }
 
 func newSplicer() *splicer {
@@ -63,6 +71,7 @@ var spool = sync.Pool{
 			dict:    make(map[string]slog.Value, 5),
 			list:    make([]any, 0, 5),
 			export:  make([]Attr, 0, 5),
+			replace: nil,
 		}
 	},
 }
@@ -91,7 +100,7 @@ func (s *splicer) clear() {
 
 	// zero out and clear reference-holding components
 	for i := range s.list {
-		s.list[i] = any(nil)
+		s.list[i] = nil
 	}
 	s.list = s.list[:0]
 
@@ -103,118 +112,96 @@ func (s *splicer) clear() {
 	for k := range s.dict {
 		delete(s.dict, k)
 	}
+
+	s.replace = nil
 }
 
 // get a message.
-func (s *splicer) msg() (msg string) {
+func (s *splicer) line() string {
 	return string(s.text)
 }
 
-// INTERPOLATE
-
-func (s *splicer) interpolate(msg string) {
-	var clip []byte
-	var found bool
-	for {
-		if msg, clip, found = s.writeUntilKey(msg); !found {
-			break
-		}
-		s.interpolateAttr(clip)
-	}
-}
-
-func (s *splicer) interpolateAttr(clip []byte) {
-	key, verb := splitKeyVerb(clip)
-
-	if len(key) == 0 {
-		s.interpolateUnkeyed(verb)
-	} else {
-		s.interpolateKeyed(key, verb)
-	}
-}
-
-func (s *splicer) interpolateUnkeyed(verb []byte) {
-	var arg any
-	if len(s.list) > 0 {
-		arg = s.list[0]
-		s.list = s.list[1:]
-	} else {
-		s.writeString(missingArg)
-		return
-	}
-
-	if a, isAttr := arg.(Attr); isAttr {
-		s.writeValue(a.Value, verb)
-		return
-	}
-
-	s.writeArg(arg, verb)
-}
-
-func (s *splicer) interpolateKeyed(key, verb []byte) {
-	v, ok := s.dict[string(key)]
-
-	// should be unreachable, but I kept reaching it
-	if !ok {
-		s.writeString(missingAttr)
-		return
-	}
-
-	s.writeValue(v, verb)
-}
-
-// after interpolation, freeze unsafely yields a string containing an interpolated message.
-// but, it's catastrophically bad to read the string after free has been called.
-// func (s *splicer) freezeUnsafe() (msg string) {
-// 	textHeader := (*reflect.SliceHeader)(unsafe.Pointer(&s.text))
-// 	msgHeader := (*reflect.StringHeader)(unsafe.Pointer(&msg))
-// 	msgHeader.Data, msgHeader.Len = textHeader.Data, textHeader.Len
-// 	return
-// }
-
 // JOIN / MATCH
 
-// read each of seg / ctx / remaining args (order matters)
+func (s *splicer) listUnkeyed(n int, args []any) []any {
+	for i := 0; i < n; i++ {
+		if len(args) == 0 {
+			s.list = append(s.list, missingArg)
+			continue
+		}
+		s.list = append(s.list, args[0])
+		if a, isAttr := args[0].(Attr); isAttr {
+			s.export = append(s.export, a)
+		}
+
+		args = args[1:]
+	}
+	return args
+}
+
+func (s *splicer) insert(a Attr) {
+	s.export = append(s.export, a)
+}
+
+// read seg and remaining args
 // update interpolation dictionary and export list
-func (s *splicer) join(seg []Attr, ctx context.Context, args []any) {
+func (s *splicer) join(scope string, seg []Attr, args []any) {
 	// handler segment
 	for _, a := range seg {
-		s.match(a)
+		s.match(scope, a)
 	}
 
-	// context
-	if ctx != nil {
-		if as, ok := ctx.Value(segmentKey{}).([]Attr); ok {
-			for _, a := range as {
-				s.match(a)
-				s.export = append(s.export, a)
+	for len(args) > 0 {
+		var a Attr
+		switch arg := args[0].(type) {
+		case string:
+			if len(args) == 1 {
+				a = slog.String(arg, missingArg)
+				args = args[1:]
+			} else {
+				a = slog.Any(arg, args[1])
+				args = args[2:]
 			}
+		case Attr:
+			a = arg
+			args = args[1:]
+		default:
+			a = slog.Any(missingKey, arg)
+			args = args[1:]
 		}
+
+		s.insert(a)
 	}
 
-	// unkeyed
-	// (allocates a bit for Groups, hmm)
-	for _, arg := range s.list {
-		if a, ok := arg.(Attr); ok {
-			s.match(a)
-		}
+	for _, a := range s.export {
+		s.match(scope, a)
 	}
-
-	// keyed
-	ex := Segment(args...)
-	for _, a := range ex {
-		s.match(a)
-	}
-	s.export = append(s.export, ex...)
 }
 
 // root of matching invocation
-func (s *splicer) match(a Attr) {
+// here, an attr key is known to be needed for interpolation
+// match attempts to puts the right value in the dictionary
+func (s *splicer) match(scope string, a Attr) {
+	// match if raw attr key is found in dictionary
 	if _, found := s.dict[a.Key]; found {
+		if s.replace != nil {
+			a = s.replace(a)
+		}
 		s.dict[a.Key] = a.Value
+		return
 	}
+
+	// match if given prefix + attr key is found in dictionary
+	if _, found := s.dict[scope+a.Key]; found {
+		if s.replace != nil {
+			a = s.replace(a)
+		}
+		s.dict[scope+a.Key] = a.Value
+		return
+	}
+
 	if a.Value.Kind() == slog.GroupKind {
-		// store a marker that deliminates s.scratch state before all matchRec operations
+		// store a marker that deliminates s.scratch state before subsequent matchRec operations
 		gpos := len(s.scratch)
 
 		// push attr key
@@ -240,11 +227,14 @@ func (s *splicer) matchRec(group []Attr, gpos int) {
 		// match
 		key := string(s.scratch[gpos:])
 		if _, found := s.dict[key]; found {
+			if s.replace != nil {
+				a = s.replace(a)
+			}
 			s.dict[key] = a.Value
 		}
 
 		// recursively matchRec, one deeper level
-		// keep gpos invariant through matchRec
+		// (keep gpos invariant through matchRec)
 		if a.Value.Kind() == slog.GroupKind {
 			s.scratch = append(s.scratch, '.')
 			s.matchRec(a.Value.Group(), gpos)
@@ -253,4 +243,140 @@ func (s *splicer) matchRec(group []Attr, gpos int) {
 		// pop attr key
 		s.scratch = s.scratch[:apos]
 	}
+}
+
+// WRITES
+
+func (s *splicer) Write(p []byte) (int, error) {
+	s.text = append(s.text, p...)
+	return len(p), nil
+}
+
+func (s *splicer) writeByte(c byte) {
+	s.text = append(s.text, c)
+}
+
+func (s *splicer) writeRune(r rune) {
+	s.text = utf8.AppendRune(s.text, r)
+}
+
+func (s *splicer) writeString(m string) {
+	s.text = append(s.text, m...)
+}
+
+// TYPED WRITES
+
+func (s *splicer) writeArg(arg any, verb []byte) {
+	switch arg := arg.(type) {
+	case Attr:
+		s.writeValue(arg.Value, verb)
+	default:
+		s.writeValue(slog.AnyValue(arg), verb)
+	}
+}
+
+func (s *splicer) writeValue(v slog.Value, verb []byte) {
+	if len(verb) > 0 {
+		s.writeValueVerb(v, string(verb))
+	} else {
+		s.writeValueNoVerb(v)
+	}
+}
+
+func (s *splicer) writeValueNoVerb(v slog.Value) {
+	switch v.Kind() {
+	case slog.StringKind:
+		s.writeString(v.String())
+	case slog.BoolKind:
+		s.text = strconv.AppendBool(s.text, v.Bool())
+	case slog.Float64Kind:
+		s.text = strconv.AppendFloat(s.text, v.Float64(), 'g', -1, 64)
+	case slog.Int64Kind:
+		s.text = strconv.AppendInt(s.text, v.Int64(), 10)
+	case slog.Uint64Kind:
+		s.text = strconv.AppendUint(s.text, v.Uint64(), 10)
+	case slog.DurationKind:
+		s.text = appendDuration(s.text, v.Duration())
+	case slog.TimeKind:
+		s.text = appendTimeRFC3339Millis(s.text, v.Time())
+	case slog.GroupKind:
+		s.writeGroup(v.Group())
+	case slog.LogValuerKind:
+		s.writeValueNoVerb(v.Resolve())
+	case slog.AnyKind:
+		fmt.Fprintf(s, "%v", v.Any())
+	default:
+		panic(corruptKind)
+	}
+}
+
+func (s *splicer) writeValueVerb(v slog.Value, verb string) {
+	switch v.Kind() {
+	case slog.StringKind:
+		fmt.Fprintf(s, verb, v.String())
+	case slog.BoolKind:
+		fmt.Fprintf(s, verb, v.Bool())
+	case slog.Float64Kind:
+		fmt.Fprintf(s, verb, v.Float64())
+	case slog.Int64Kind:
+		fmt.Fprintf(s, verb, v.Int64())
+	case slog.Uint64Kind:
+		fmt.Fprintf(s, verb, v.Uint64())
+	case slog.DurationKind:
+		s.writeDurationVerb(v.Duration(), verb)
+	case slog.TimeKind:
+		s.writeTimeVerb(v.Time(), verb)
+	case slog.GroupKind:
+		s.writeGroup(v.Group())
+	case slog.LogValuerKind:
+		s.writeValueVerb(v.Resolve(), verb)
+	case slog.AnyKind:
+		fmt.Fprintf(s, verb, v.Any())
+	default:
+		panic(corruptKind)
+	}
+}
+
+func (s *splicer) writeTimeVerb(t time.Time, verb string) {
+	switch verb {
+	case "epoch":
+		s.text = strconv.AppendInt(s.text, t.Unix(), 10)
+	case "RFC3339":
+		s.text = t.AppendFormat(s.text, time.RFC3339)
+	case "kitchen":
+		s.text = t.AppendFormat(s.text, time.Kitchen)
+	case "stamp":
+		s.text = t.AppendFormat(s.text, time.Stamp)
+	default:
+		// TODO: might be slow /shrug
+		s.text = t.AppendFormat(s.text, strings.Replace(verb, ";", ":", -1))
+	}
+}
+
+func (s *splicer) writeDurationVerb(d time.Duration, verb string) {
+	switch verb {
+	case "epoch":
+		s.text = strconv.AppendInt(s.text, int64(d), 10)
+	default:
+		fmt.Fprintf(s, verb, d.String())
+	}
+}
+
+func (s *splicer) writeError(err error) {
+	if len(s.text) > 0 {
+		s.writeString(": ")
+	}
+	s.writeString(err.Error())
+}
+
+func (s *splicer) writeGroup(as []Attr) {
+	next := byte('{')
+	for _, a := range as {
+		s.writeByte(next)
+		s.writeString(a.Key)
+		s.writeByte(':')
+		s.writeValueNoVerb(a.Value)
+		next = ' '
+	}
+	s.writeByte('}')
 }

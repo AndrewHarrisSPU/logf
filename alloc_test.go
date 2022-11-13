@@ -16,7 +16,7 @@ func wantAllocs(t *testing.T, want int, fn func()) {
 	}
 }
 
-func TestAllocKindsSplicer(t *testing.T) {
+func TestAllocSplicerKinds(t *testing.T) {
 	fs := []struct {
 		alloc int
 		arg   any
@@ -47,7 +47,7 @@ func TestAllocKindsSplicer(t *testing.T) {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run(label, func(t *testing.T) {
 			// plus one for safe freezing
-			wantAllocs(t, f.alloc+1, fns[i])
+			wantAllocs(t, f.alloc, fns[i])
 		})
 	}
 }
@@ -64,13 +64,13 @@ func allocSplicerFunc(arg any, verb string) func() {
 		s := newSplicer()
 		defer s.free()
 
-		s.join(nil, nil, []any{arg})
-		s.interpolate(msg)
-		io.WriteString(io.Discard, s.msg())
+		s.join("", nil, []any{arg})
+		s.ipol(msg)
+		io.WriteString(io.Discard, s.line())
 	}
 }
 
-func TestAllocKindsLogger(t *testing.T) {
+func TestAllocLoggerKinds(t *testing.T) {
 	fs := []struct {
 		argAlloc  int
 		withAlloc int
@@ -93,7 +93,7 @@ func TestAllocKindsLogger(t *testing.T) {
 
 		// time
 		{1, 1, 1, time.Now(), ""},
-		{2, 2, 2, time.Now(), time.Kitchen},
+		{1, 1, 1, time.Now(), time.Kitchen},
 		{1, 1, 1, time.Since(time.Now()), ""},
 
 		// any
@@ -109,7 +109,9 @@ func TestAllocKindsLogger(t *testing.T) {
 		{2, 2, 2, spoof2{}, "%10s"},
 	}
 
-	log := New(Using.Writer(io.Discard))
+	log := New().
+		Writer(io.Discard).
+		JSON()
 
 	var argFns []func()
 	var withFns []func()
@@ -124,13 +126,13 @@ func TestAllocKindsLogger(t *testing.T) {
 	for i, f := range fs {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run("arg "+label, func(t *testing.T) {
-			wantAllocs(t, f.argAlloc+1, argFns[i])
+			wantAllocs(t, f.argAlloc+2, argFns[i])
 		})
 		t.Run("with "+label, func(t *testing.T) {
-			wantAllocs(t, f.withAlloc+1, withFns[i])
+			wantAllocs(t, f.withAlloc+2, withFns[i])
 		})
 		t.Run("fmt "+label, func(t *testing.T) {
-			wantAllocs(t, f.fmtAlloc+1, fmtFns[i])
+			wantAllocs(t, f.fmtAlloc+2, fmtFns[i])
 		})
 	}
 }
@@ -168,8 +170,10 @@ func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 	}
 }
 
-func TestAllocsGroups(t *testing.T) {
-	log := New(Using.Writer(io.Discard))
+func TestAllocLoggerGroups(t *testing.T) {
+	log := New().
+		Writer(io.Discard).
+		Text()
 
 	g := slog.Group("1", slog.String("roman", "i"))
 	log = log.With(g)

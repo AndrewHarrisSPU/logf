@@ -1,27 +1,83 @@
 # logf
 Structured logging with string interpolation in Go.
 
-## Goals
-- Explore `x/exp/slog` with `Handler`ware that doesn't serialize a `Record`, but passes it to another `Handler`
-- Explore string interpolation.
+`logf` extends `slog` to cover some additional uses:
 
-## Outcomes
+1) message string interpolations
+2) formatting to strings or errors, rather than `Record`s
+3) console pretty-printing
+4) testing.TB integration
 
-### Performance:
-- Low count of allocation calls is possible. Pooling interpolation dictionaries means not allocating a new map, just reusing an empty one. (Notably, Go map capacity doesn't shrink when elements are deleted.)
-- While the count of allocations is low, the size of allcations is relatively large.
-- A message string must be read to discover interpolation sites, causing some overhead that is always payed. In benchmarks, this is about 1/10th of the cost of the cost of logging a record.
-- Each interpolation site adds to the cost of handling a `Record`. Each interpolation is about 1/5th the cost of a `Record` with no interpolation.
+## Quick start
 
-## Opinions That May be Wrong
+### Hello Logger
 
-Part of experimenting with `slog` is figuring out what the opinions are, and what different opinions are possible, and what the implications are. So, `logf` is trying to do some things differently just for the sake of experimenting.
+```
+log := logf.New().Printer()
+log.Msg("Hello, World)
+```
 
-- String interpolation is worth some allocation.
-- Munging of small collections, with `Segment`
-- Rather than many levels, store level in the `Logger`.
-- Contexts store `[]Attr` segments. Contexts are either persistent, and handled with `With`, or transient, and handled by a `CtxLogger`.
-- Configuration uses `Using.X` struct.
+### Leveled logging
+
+```
+log.Level(logf.WARN).Msg("oops!")
+```
+
+### Structured logging
+```
+log = log.With("name", "Mulder")
+```
+
+### Low configuration:
+
+*A logf.Logger*:
+```
+log := logf.New().Logger()
+```
+
+*More printing*:
+```
+print := logf.New().Printer()
+```
+
+*Using a `slog.Handler`*
+```
+log := logf.UsingHandler(h)
+```
+
+*Extracting from a context.Context*
+```
+log := logf.FromContext(ctx)
+```
+
+*A `slog.Handler` writing to standard output*:
+```
+handler := log.StdTTY
+```
+
+## Full Configuration
+
+`logf.New()` returns a vaild `*Config`. Additional configuration is possible through `Config` methods.
+
+Some `Config` methods follow `slog.Handler` construction:
+- `Level`
+- `AddSource`
+- `Writer`
+
+The `JSON` and `Text` methods produce a `Logger` using a `slog.JSONHandler`/`slog.TextHandler` for encoding. These `Logger`s only observe the above configuration fields.
+
+Other `Config` methods configure `logf.TTY`:
+- `Colors`
+- `Elapsed`
+- `Spin`
+- `TimeFormat`
+
+`Config.TTY` produces a `TTY` observing all configuration fields.
+`Config.Logger` is equivalent to `Config.TTY().Logger`, and `Config.Printer` is equivalent to `Config.TTY().Printer`.
+
+# Deep dive
+
+
 
 ## What's where
 
@@ -31,10 +87,10 @@ Part of experimenting with `slog` is figuring out what the opinions are, and wha
 |`context.go`| CtxLogger |
 |`handler.go`| Handler |
 |`logger.go`| Logger |
+|`interpolate.go`| interpolation routines |
 |`minimal.go`| a minimal encoder|
-|`splicer.go`| splicer mgmt, join, matching |
-|`splicer2.go`| message scan |
-|`splicer3.go`| interpolate and write |
+|`splicer.go`| splicer management |
+|`tb.go`| `testing.TB` wrapper |
 |`testutil.go`| testing gadgets |
 |`using.go`| configuration via Options|
 
@@ -51,14 +107,16 @@ Both flavors accomodate formatting verbs (generally, the verb passed to `fmt`):
 {pi:%3.2f} - keyed, formatting as a float
 ```
 
+A `.` is used to join `Attr` keys in the case of a `Group`-valued `Attr`.
+
 ### Examples:
 Unkeyed arguments draw from arguments, like `print`:
 ```
 log.Msg("{}", "a")
-	-> msg="a"
+	-> a
 
 log.Msg("{}, {}", 0, 1)
-	-> msg="0, 1"
+	-> 0, 1
 ```
 
 If an unkeyed argument is an `Attr`, it will export:
@@ -66,7 +124,7 @@ If an unkeyed argument is an `Attr`, it will export:
 exported := slog.Bool( "exported", true)
 
 log.Msg("{}", exported)
-	-> msg="true" exported=true
+	->  true exported=true
 
 log.Msg("{} {exported}", exported)
 	-> msg="true true" exported=true
@@ -99,20 +157,16 @@ log.Msg("{1}")
 	-> msg="[i=first off, this thing ii=and another thing]"
 ```
 
-### Ordering
-`Attr`s join the interpolation dictionary in a specific order: `Handler` segments, `context.Context` segments, arguments.
-If non-unique `Attr` keys are seen, the last seen `Attr` wins.
-
 ### Special verbs
 Time and duraton may accept some special verbs:
 - a time value may format with `{:RFC3339}`, `{:kitchen}`, `{:stamp}`, or `{:epoch}` (for seconds into the current Unix epoch).
 - interpolation can almost accept time layout strings - any occurence of a `:` should be replaced by a `;`.
-- a duration value may format with `{:fast}` (like epoch). Otherwise, it formats like a string.
+- a duration value may format with `{:epoch}`. Otherwise, it formats like a string.
 
 ### Escaping
 
-Because '{', '}', and ':' are used as interpolation tokens, they may need to be escaped in messages passed to logging calls.
-A '\\' reads as an escape, but will itself need to be escaped in double-quoted strings.
+Because '{', '}', and ':' are recognized as interpolation tokens, they require escaping to appear in messages passed to logging calls.
+A '\\' escapes any following character.
 
 ```
 log.Msg( "About that struct\\{\\}..." )
@@ -125,11 +179,6 @@ log.With(":color", "mauve" ).Msg("The color is {\\:color}.")
 Log.With( "x:y ratio", 2 ).Msg( `What a funny ratio: {x\:y ratio}!` )
 	-> msg="What a funny ratio: 2!"
 ```
-
-## Handler Composition
-In the weeds: `logf` Handlers rely on wrapped `slog.Handlers` for as much state management as possible.
-Nothing presumed to exist in the wrapped `slog.Handler` is visible in the `logf.Handler`
-
 
 ### Scope and composition
 `logf.Handler` doesn't track nested scoping. This is a useful property when interpolating.
@@ -155,3 +204,8 @@ What would change with some hypothetical language-level gadgetry? Matching argum
 
 - `sync.Pool` objects don't shrink in capacity; the mem pinning behavior is simple and workable. This is sort of a general question with `sync.Pool`. This package uses pooled `splicers`; they can pin more than they use, they can't grow very large.
 
+### Performance:
+- Low count of allocation calls is possible. Pooling interpolation dictionaries means not allocating a new map, just reusing an empty one. (Notably, Go map capacity doesn't shrink when elements are deleted.)
+- While the count of allocations is low, the size of allcations is relatively large.
+- A message string must be read to discover interpolation sites, causing some overhead that is always payed. In benchmarks, this is about 1/10th of the cost of the cost of logging a record.
+- Each interpolation site adds to the cost of handling a `Record`. Each interpolation is about 1/5th the cost of a `Record` with no interpolation.

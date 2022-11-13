@@ -1,105 +1,44 @@
 package main
 
 import (
-	"errors"
-	"fmt"
-	"io"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AndrewHarrisSPU/logf"
-	"golang.org/x/exp/slog"
 )
 
 var space string = "     "
-var beams string = ":-~- "
+var beams string = " -~- "
 var width int = len(beams) * 10
 
 func main() {
-	h := spinHandler{
-		mu:    new(sync.Mutex),
-		start: time.Now(),
-	}
-	log := logf.New(logf.Using.Handler(&h)).With("Scully", "👩‍🦰")
-	ufo := errors.New("🛸")
+	tty := logf.New().
+		Layout("label", "message").
+		Level(logf.INFO+1).
+		Spin(logf.INFO, 1).
+		TTY()
 
+	log := tty.Logger().With("Scully", "👩‍🦰")
+	ufo := log.Label("🛸").Level(logf.INFO)
+	mulder := log.Label("👦🏻").Level(logf.INFO + 1)
+
+	tick := 0.0
+	step := 15.0
 	for i := 0; i < width; i++ {
-		lpad := strings.Repeat(space, 10)[:i]
-		rpad := strings.Repeat(beams, 10)[:width-i]
+		lpad := strings.Repeat(beams, 10)[i:]
+		rpad := strings.Repeat(space, 10)[width-i:]
+
+		<-time.NewTimer(30 * time.Millisecond).C
+		ufo.Msg("{}{Scully}{}", lpad, rpad)
+
 		progress := (100 * float64(i)) / float64(width)
-
-		<-time.NewTimer(40 * time.Millisecond).C
-		log.Err("{}{Scully}{}", ufo, lpad, rpad)
-
-		if i%13 == 1 {
-			log.Level(logf.INFO+1).Msg("{}: oh no! {Scully} is {}% abducted!", "👦🏻", progress)
+		if progress-tick > step {
+			tick += step
+			mulder.Msg("oh no! {Scully} is {}% abducted!", tick)
 		}
+
 	}
 
-	log.Err("{Scully} was abducted", ufo)
-}
-
-const (
-	xStore     = "\033[s"
-	xLoad      = "\033[u"
-	xLineClear = "\033[K"
-)
-
-type spinHandler struct {
-	mu            *sync.Mutex
-	start         time.Time
-	level         slog.Level
-	clearNextLine bool
-}
-
-func (h *spinHandler) Enabled(level slog.Level) bool {
-	return h.level >= level
-}
-
-func (h *spinHandler) WithAttrs([]slog.Attr) slog.Handler {
-	return h
-}
-
-func (h *spinHandler) WithGroup(name string) slog.Handler {
-	return h
-}
-
-func (h *spinHandler) Handle(r slog.Record) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	h.clearLine()
-	h.write(xStore)
-
-	if r.Level <= h.level {
-		h.clearNextLine = true
-	}
-
-	h.elapsed()
-
-	h.write(" ")
-	h.write(r.Message)
-
-	h.write("\n")
-	return nil
-}
-
-func (h *spinHandler) write(s string) {
-	io.WriteString(os.Stdout, s)
-}
-
-func (h *spinHandler) elapsed() {
-	d := time.Since(h.start).Round(time.Millisecond).String()
-	h.write(fmt.Sprintf("%-8s", d))
-}
-
-func (h *spinHandler) clearLine() {
-	if h.clearNextLine {
-		h.write(xLoad)
-		h.write(xLineClear)
-		// h.write(xLoad)
-		h.clearNextLine = false
-	}
+	log.Level(logf.INFO + 1).Msg("{Scully} was abducted")
+	tty.Write(nil)
 }

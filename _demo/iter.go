@@ -6,7 +6,7 @@ import (
 	"github.com/AndrewHarrisSPU/logf"
 )
 
-var printf = logf.New()
+var print = logf.New().Printer()
 
 // iteration with session states
 type State struct {
@@ -28,7 +28,7 @@ func takeN[T any](it IterErr[T], n int) []T {
 		i++
 		if i >= n {
 			state = State{errOverLimit}
-			printf.Label("takeN").Msg("{}", state.Err)
+			print.Label("takeN").Msg("{}", state.Err)
 			continue
 		}
 	}
@@ -50,7 +50,7 @@ func (c *counter) Next(curr State) (i int, next State) {
 		c.n++
 		if c.n > c.lim {
 			next = State{errOverLimit}
-			printf.Label("counter").Msg("{}", next.Err)
+			print.Label("counter").Msg("{}", next.Err)
 			return
 		}
 		return c.n, Ok
@@ -64,13 +64,13 @@ func (c *counter) Next(curr State) (i int, next State) {
 
 func main() {
 	c := &counter{lim: 42}
-	printf = printf.Label("->")
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
-	printf.Msg("{}", takeN[int](c, 10))
+	print = print.Label("state")
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
+	print.Msg("{}", takeN[int](c, 10))
 }

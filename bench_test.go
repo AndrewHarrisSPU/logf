@@ -3,7 +3,6 @@ package logf
 import (
 	"errors"
 	"io"
-	// "os"
 	"testing"
 	"time"
 
@@ -11,27 +10,26 @@ import (
 )
 
 func BenchmarkLoggerSize(b *testing.B) {
-	// b.Run("logf manual", benchLogfInitManual)
+	b.Run("logf manual", benchLogfInitManual)
 	b.Run("logf init", benchLogfInit)
 	b.Run("logf with 5", benchLogfWith5)
 	b.Run("logf with 10", benchLogfWith10)
 	b.Run("logf with 40", benchLogfWith40)
-	// b.Run("slog init", benchSlogInit)
-	// b.Run("slog with 5", benchSlogWith5)
-	// b.Run("slog with 10", benchSlogWith10)
-	// b.Run("slog with 40", benchSlogWith40)
+	b.Run("slog init", benchSlogInit)
+	b.Run("slog with 5", benchSlogWith5)
+	b.Run("slog with 10", benchSlogWith10)
+	b.Run("slog with 40", benchSlogWith40)
 }
 
 var globalLog Logger
-var globalSlog slog.Logger
+var globalSlog *slog.Logger
 
 func benchLogfInitManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		h := &Handler{
 			seg:       make([]Attr, 0),
-			ref:       INFO,
-			enc:       slog.NewTextHandler(io.Discard),
+			enc:       slog.NewJSONHandler(io.Discard),
 			addSource: false,
 		}
 		globalLog = Logger{h, INFO, 0}
@@ -41,7 +39,9 @@ func benchLogfInitManual(b *testing.B) {
 func benchLogfInit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		globalLog = New(Using.Writer(io.Discard))
+		globalLog = New().
+			Writer(io.Discard).
+			Logger()
 	}
 }
 
@@ -55,42 +55,51 @@ func benchSlogInit(b *testing.B) {
 func benchLogfWith5(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = New(Using.Writer(io.Discard)).With(TestAny5...)
+		_ = New().
+			Writer(io.Discard).
+			Logger().
+			With(TestAny5...)
 	}
 }
 
 func benchLogfWith10(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = New(Using.Writer(io.Discard)).With(TestAny10...)
+		_ = New().
+			Writer(io.Discard).
+			Logger().
+			With(TestAny10...)
 	}
 }
 
 func benchLogfWith40(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = New(Using.Writer(io.Discard)).With(TestAny40...)
+		_ = New().
+			Writer(io.Discard).
+			Logger().
+			With(TestAny40...)
 	}
 }
 
 func benchSlogWith5(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny5...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny5...)
 	}
 }
 
 func benchSlogWith10(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny10...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny10...)
 	}
 }
 
 func benchSlogWith40(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewTextHandler(io.Discard)).With(TestAny40...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny40...)
 	}
 }
 
@@ -103,7 +112,7 @@ func BenchmarkAttrs(b *testing.B) {
 		// {"fastText discard", newFastTextHandler(io.Discard)},
 		{"Text discard", slog.NewTextHandler(io.Discard)},
 		{"JSON discard", slog.HandlerOptions{AddSource: false}.NewJSONHandler(io.Discard)},
-		{"logf discard", NewHandler(Using.JSON, Using.Writer(io.Discard))},
+		{"logf discard", New().Writer(io.Discard).JSON().h.(*Handler)},
 	} {
 		logger := slog.New(handler.h)
 		b.Run(handler.name, func(b *testing.B) {
@@ -237,7 +246,7 @@ func BenchmarkSplicer(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			s.scan(TestMessage, nil)
-			s.join(TestAttrs, nil, TestAny5)
+			s.join("", TestAttrs, TestAny5)
 		}
 	})
 
@@ -246,11 +255,11 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scan("{} {} {} {} {}", TestAny5)
-		s.join(nil, nil, TestAny5)
+		s.join("", nil, TestAny5)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			s.interpolate("{} {} {} {} {}")
+			s.ipol("{} {} {} {} {}")
 		}
 	})
 
@@ -259,11 +268,11 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scan("{string} {status} {duration} {time} {error}", nil)
-		s.join(TestAttrs, nil, nil)
+		s.join("", TestAttrs, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			s.interpolate("{string} {status} {duration} {time} {error}")
+			s.ipol("{string} {status} {duration} {time} {error}")
 		}
 	})
 }
@@ -272,7 +281,10 @@ func BenchmarkInterpolation(b *testing.B) {
 	// w := os.Stdout
 	w := io.Discard
 
-	log := New(Using.JSON, Using.Writer(w))
+	log := New().
+		Writer(w).
+		JSON()
+
 	log5 := log.With(TestAny5...)
 	log10 := log.With(TestAny10...)
 	log40 := log.With(TestAny40...)

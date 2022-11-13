@@ -7,7 +7,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var print = logf.New().Label("overload")
+var print = logf.New().Printer().Label("overload")
 
 type Agent struct {
 	First string
