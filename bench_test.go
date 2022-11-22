@@ -21,18 +21,18 @@ func BenchmarkLoggerSize(b *testing.B) {
 	b.Run("slog with 40", benchSlogWith40)
 }
 
-var globalLog Logger
+var globalLog *Logger
 var globalSlog *slog.Logger
 
 func benchLogfInitManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		h := &Handler{
-			seg:       make([]Attr, 0),
+			attrs:     make([]Attr, 0),
 			enc:       slog.NewJSONHandler(io.Discard),
 			addSource: false,
 		}
-		globalLog = Logger{h, INFO, 0}
+		globalLog = &Logger{h, INFO, 0}
 	}
 }
 
@@ -41,7 +41,7 @@ func benchLogfInit(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		globalLog = New().
 			Writer(io.Discard).
-			Logger()
+			JSON()
 	}
 }
 
@@ -57,7 +57,7 @@ func benchLogfWith5(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = New().
 			Writer(io.Discard).
-			Logger().
+			JSON().
 			With(TestAny5...)
 	}
 }
@@ -67,7 +67,7 @@ func benchLogfWith10(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = New().
 			Writer(io.Discard).
-			Logger().
+			JSON().
 			With(TestAny10...)
 	}
 }
@@ -77,7 +77,7 @@ func benchLogfWith40(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = New().
 			Writer(io.Discard).
-			Logger().
+			JSON().
 			With(TestAny40...)
 	}
 }
@@ -246,7 +246,7 @@ func BenchmarkSplicer(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			s.scan(TestMessage, nil)
-			s.join("", TestAttrs, TestAny5)
+			s.join("", TestAttrs, TestAny5, nil)
 		}
 	})
 
@@ -255,7 +255,7 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scan("{} {} {} {} {}", TestAny5)
-		s.join("", nil, TestAny5)
+		s.join("", nil, TestAny5, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -268,7 +268,7 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scan("{string} {status} {duration} {time} {error}", nil)
-		s.join("", TestAttrs, nil)
+		s.join("", TestAttrs, nil, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {

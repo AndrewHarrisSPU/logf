@@ -1,98 +1,19 @@
 # logf
-Structured logging with string interpolation in Go.
-
-`logf` extends `slog` to cover some additional uses:
-
-1) message string interpolations
-2) formatting to strings or errors, rather than `Record`s
-3) console pretty-printing
-4) testing.TB integration
-
-## Quick start
-
-### Hello Logger
-
-```
-log := logf.New().Printer()
-log.Msg("Hello, World)
-```
-
-### Leveled logging
-
-```
-log.Level(logf.WARN).Msg("oops!")
-```
-
-### Structured logging
-```
-log = log.With("name", "Mulder")
-```
-
-### Low configuration:
-
-*A logf.Logger*:
-```
-log := logf.New().Logger()
-```
-
-*More printing*:
-```
-print := logf.New().Printer()
-```
-
-*Using a `slog.Handler`*
-```
-log := logf.UsingHandler(h)
-```
-
-*Extracting from a context.Context*
-```
-log := logf.FromContext(ctx)
-```
-
-*A `slog.Handler` writing to standard output*:
-```
-handler := log.StdTTY
-```
-
-## Full Configuration
-
-`logf.New()` returns a vaild `*Config`. Additional configuration is possible through `Config` methods.
-
-Some `Config` methods follow `slog.Handler` construction:
-- `Level`
-- `AddSource`
-- `Writer`
-
-The `JSON` and `Text` methods produce a `Logger` using a `slog.JSONHandler`/`slog.TextHandler` for encoding. These `Logger`s only observe the above configuration fields.
-
-Other `Config` methods configure `logf.TTY`:
-- `Colors`
-- `Elapsed`
-- `Spin`
-- `TimeFormat`
-
-`Config.TTY` produces a `TTY` observing all configuration fields.
-`Config.Logger` is equivalent to `Config.TTY().Logger`, and `Config.Printer` is equivalent to `Config.TTY().Printer`.
-
-# Deep dive
-
-
 
 ## What's where
 
 | file | stuff |
 | -- | -- |
 |`alias.go`| aliases to slog stuff, as well as borrowed std lib code |
-|`context.go`| CtxLogger |
+|`attrs.go`| procuring and munging attrs |
+|`config.go`| configuration, from `New` |
 |`handler.go`| Handler |
 |`logger.go`| Logger |
-|`interpolate.go`| interpolation routines |
-|`minimal.go`| a minimal encoder|
-|`splicer.go`| splicer management |
-|`tb.go`| `testing.TB` wrapper |
-|`testutil.go`| testing gadgets |
-|`using.go`| configuration via Options|
+|`interpolate.go`| splicer interpolation routines |
+|`splicer.go`| splicer lifecycle and writing routines |
+|`tty.go`| the TTY device |
+|`demo`| `go run`-able TTY demos |
+|`testlog`| testing gadgets |
 
 ## Interpolation
 

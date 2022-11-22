@@ -1,4 +1,4 @@
-package logf
+package testlog
 
 import (
 	"bytes"
@@ -10,7 +10,11 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-// type TB wraps an instance of testing.TB
+// type TB embeds [testing.TB], and has the following utility:
+//   - TB overrides some [testing.TB] methods, and embeds others - it satisifes the [testing.TB] interface
+//   - TB also satisfies the [slog.Handler] interface
+//   - TB provides a method Want, for substring matching of logged output
+//   - TB provides a method WantBuffer, for string matching of logged output
 type TB struct {
 	// turns time on / off in logs
 	Time bool
@@ -28,29 +32,21 @@ type TB struct {
 	last slog.Record
 
 	// encoder
-	enc *Handler
+	enc slog.Handler
 }
 
-func WithTest(t testing.TB) *TB {
+func UsingTB(ttb testing.TB) *TB {
 	tb := new(TB)
 	tb.Depth = 1
 
-	tb.TB = t
+	tb.TB = ttb
 	tb.TB.Cleanup(func() {
 		tb.Clear()
 	})
 
-	enc := slog.HandlerOptions{
+	tb.enc = slog.HandlerOptions{
 		AddSource: true,
-	}.NewTextHandler(&tb.buf)
-
-	h := &Handler{
-		enc: enc,
-	}
-
-	tb.enc = h.WithAttrs([]Attr{
-		slog.String("test", t.Name()),
-	}).(*Handler)
+	}.NewJSONHandler(&tb.buf)
 
 	return tb
 }
@@ -66,13 +62,13 @@ func (tb *TB) Handle(r slog.Record) error {
 	return tb.enc.Handle(r)
 }
 
-func (tb *TB) WithAttrs(as []Attr) slog.Handler {
-	tb.enc = tb.enc.withAttrs(as).(*Handler)
+func (tb *TB) WithAttrs(as []slog.Attr) slog.Handler {
+	tb.enc = tb.enc.WithAttrs(as)
 	return tb
 }
 
 func (tb *TB) WithGroup(name string) slog.Handler {
-	tb.enc = tb.enc.withGroup(name).(*Handler)
+	tb.enc = tb.enc.WithGroup(name)
 	return tb
 }
 
@@ -114,9 +110,9 @@ func (tb *TB) Logf(format string, args ...any) {
 }
 
 func (tb *TB) Setenv(key, value string) {
-	tb.enc = tb.enc.withAttrs([]Attr{
+	tb.enc = tb.enc.WithAttrs([]slog.Attr{
 		slog.String(key, value),
-	}).(*Handler)
+	})
 }
 
 func (tb *TB) Skip(args ...any) {
@@ -149,14 +145,14 @@ func (tb *TB) addDepth(depth int) int {
 
 func (tb *TB) record(depth int, args ...any) {
 	msg := fmt.Sprint(args...)
-	r := slog.NewRecord(tb.time(), INFO, msg, tb.addDepth(depth), nil)
+	r := slog.NewRecord(tb.time(), slog.InfoLevel, msg, tb.addDepth(depth), nil)
 	tb.last = r
 	tb.enc.Handle(r)
 }
 
 func (tb *TB) recordf(depth int, f string, args ...any) {
 	msg := fmt.Sprintf(f, args...)
-	r := slog.NewRecord(tb.time(), INFO, msg, tb.addDepth(depth), nil)
+	r := slog.NewRecord(tb.time(), slog.InfoLevel, msg, tb.addDepth(depth), nil)
 	tb.last = r
 	tb.enc.Handle(r)
 }
@@ -179,7 +175,7 @@ func (tb *TB) dump() {
 
 func (tb *TB) Clear() {
 	tb.buf.Reset()
-	tb.last = slog.NewRecord(time.Time{}, ERROR, "", 0, nil)
+	tb.last = slog.NewRecord(time.Time{}, slog.ErrorLevel, "", 0, nil)
 }
 
 // Asserts

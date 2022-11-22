@@ -14,31 +14,26 @@ var width int = len(beams) * 10
 func main() {
 	tty := logf.New().
 		Layout("label", "message").
-		Level(logf.INFO+1).
-		Spin(logf.INFO, 1).
-		TTY()
+		Stream(logf.INFO+1, logf.INFO+2).
+		StreamSizes(1, 1).
+		TTY().
+		With("Scully", "Agent Scully 👩‍🦰")
 
-	log := tty.Logger().With("Scully", "👩‍🦰")
+	log := tty.Logger().Level(logf.INFO + 2)
 	ufo := log.Label("🛸").Level(logf.INFO)
-	mulder := log.Label("👦🏻").Level(logf.INFO + 1)
+	mulder := log.Label("Agent Mulder 👦🏻").Level(logf.INFO + 1)
 
-	tick := 0.0
-	step := 15.0
 	for i := 0; i < width; i++ {
 		lpad := strings.Repeat(beams, 10)[i:]
 		rpad := strings.Repeat(space, 10)[width-i:]
 
-		<-time.NewTimer(30 * time.Millisecond).C
+		<-time.NewTimer(25 * time.Millisecond).C
 		ufo.Msg("{}{Scully}{}", lpad, rpad)
 
 		progress := (100 * float64(i)) / float64(width)
-		if progress-tick > step {
-			tick += step
-			mulder.Msg("oh no! {Scully} is {}% abducted!", tick)
-		}
-
+		mulder.Msg("oh no! {Scully} is {:%2.2f}% abducted!", progress)
 	}
 
-	log.Level(logf.INFO + 1).Msg("{Scully} was abducted")
-	tty.Write(nil)
+	log.Msg("{Scully} was abducted")
+	tty.Close()
 }

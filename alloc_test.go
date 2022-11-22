@@ -2,10 +2,11 @@ package logf
 
 import (
 	"fmt"
-	"golang.org/x/exp/slog"
 	"io"
 	"testing"
 	"time"
+
+	"golang.org/x/exp/slog"
 )
 
 func wantAllocs(t *testing.T, want int, fn func()) {
@@ -22,19 +23,19 @@ func TestAllocSplicerKinds(t *testing.T) {
 		arg   any
 		verb  string
 	}{
-		{1, "string", ""},
-		{1, "string", "%10s"},
-		{1, true, ""},
-		{1, true, "%-6v"},
-		{1, 1, ""},
-		{1, -1, "%+8d"},
-		{1, uint64(1), ""},
-		{1, 1.0, ""},
-		{1, 1.111, "%2.1f"},
-		{1, time.Now(), ""},
-		{1, time.Now(), time.Kitchen},
-		{1, time.Since(time.Now()), ""},
-		{1, struct{}{}, ""},
+		{0, "string", ""},
+		{0, "string", "%10s"},
+		{0, true, ""},
+		{0, true, "%-6v"},
+		{0, 1, ""},
+		{0, -1, "%+8d"},
+		{0, uint64(1), ""},
+		{0, 1.0, ""},
+		{0, 1.111, "%2.1f"},
+		{0, time.Now(), ""},
+		{0, time.Now(), time.Kitchen},
+		{0, time.Since(time.Now()), ""},
+		{0, struct{}{}, ""},
 	}
 
 	var fns []func()
@@ -64,7 +65,7 @@ func allocSplicerFunc(arg any, verb string) func() {
 		s := newSplicer()
 		defer s.free()
 
-		s.join("", nil, []any{arg})
+		s.join("", nil, []any{arg}, nil)
 		s.ipol(msg)
 		io.WriteString(io.Discard, s.line())
 	}
@@ -118,9 +119,9 @@ func TestAllocLoggerKinds(t *testing.T) {
 	var fmtFns []func()
 
 	for i, f := range fs {
-		argFns = append(argFns, allocLoggerArgFunc(log, f.arg, f.verb))
-		withFns = append(argFns, allocLoggerWithFunc(log, i, f.arg, f.verb))
-		fmtFns = append(argFns, allocLoggerFmtFunc(log, i, f.arg, f.verb))
+		argFns = append(argFns, allocLoggerArgFunc(*log, f.arg, f.verb))
+		withFns = append(argFns, allocLoggerWithFunc(*log, i, f.arg, f.verb))
+		fmtFns = append(argFns, allocLoggerFmtFunc(*log, i, f.arg, f.verb))
 	}
 
 	for i, f := range fs {
@@ -153,7 +154,7 @@ func allocLoggerArgFunc(log Logger, arg any, verb string) func() {
 func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 	key := fmt.Sprintf("%d", n)
 	msg := fmt.Sprintf("{%s}", key)
-	log = log.With(key, arg)
+	log.With(key, arg)
 
 	return func() {
 		log.Msg(msg, arg)
@@ -163,10 +164,10 @@ func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 	key := fmt.Sprintf("%d", n)
 	msg := fmt.Sprintf("{%s}", key)
-	log = log.With(key, arg)
+	log.With(key, arg)
 
 	return func() {
-		_, _ = log.Fmt(msg, nil)
+		_ = log.Msgf(msg, nil)
 	}
 }
 
@@ -176,7 +177,7 @@ func TestAllocLoggerGroups(t *testing.T) {
 		Text()
 
 	g := slog.Group("1", slog.String("roman", "i"))
-	log = log.With(g)
+	log.With(g)
 
 	fn := func() {
 		log.Msg("")

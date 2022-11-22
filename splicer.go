@@ -26,17 +26,17 @@ var missingAttrValue = slog.StringValue("!missing-attr")
 // Splicers have a well-defined lifecycle per logging call:
 // 1. init
 // - returns a fresh/cleared splicer from a pool.
-// - a number of maps and splices have capacity but no elements.
+// - splicer components likely have allocated capacity but no elements.
 // 2. scan
-// - scans message for interpolation sites, each keyed interpolation added to dictionary
+// - scans message for interpolation sites; each keyed interpolation added to dictionary
 // - partitions arguments into unkeyed-values / keyed-attrs
 // 3. join
-// - attrs' values from a Handler, context, etc. are matched into interpolation dictionary
-// - an exported attr list is built in order: handler, context, keyed-attrs
+// - attrs from a handler etc. are matched into interpolation dictionary
+// - an exported attr list is built (order is observed; last seen wins)
 // 4. interpolate
 // - while reading message, final text is written
 // 5. export
-// - after interpolation, message text and exported attrs are available
+// - after interpolation, splicer text is availiable via s.line(), exports via s.export
 // 6. free
 // - before returning to pool, zero out and clear internal slices and dict
 type splicer struct {
@@ -56,7 +56,8 @@ type splicer struct {
 	// holds ordered list of exported attrs
 	export []Attr
 
-	replace func(Attr) Attr
+	// false if scanning indicates no interpolation
+	interpolates bool
 }
 
 func newSplicer() *splicer {
@@ -71,7 +72,6 @@ var spool = sync.Pool{
 			dict:    make(map[string]slog.Value, 5),
 			list:    make([]any, 0, 5),
 			export:  make([]Attr, 0, 5),
-			replace: nil,
 		}
 	},
 }
@@ -112,11 +112,10 @@ func (s *splicer) clear() {
 	for k := range s.dict {
 		delete(s.dict, k)
 	}
-
-	s.replace = nil
+	s.interpolates = false
 }
 
-// get a message.
+// return spliced text
 func (s *splicer) line() string {
 	return string(s.text)
 }
@@ -139,53 +138,58 @@ func (s *splicer) listUnkeyed(n int, args []any) []any {
 	return args
 }
 
-func (s *splicer) insert(a Attr) {
-	s.export = append(s.export, a)
-}
-
-// read seg and remaining args
+// read attrs and remaining args
 // update interpolation dictionary and export list
-func (s *splicer) join(scope string, seg []Attr, args []any) {
-	// handler segment
-	for _, a := range seg {
-		s.match(scope, a)
+func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr) Attr) {
+	// match attrs
+	for _, a := range attrs {
+		s.match(scope, a, replace)
 	}
 
+	// munge args -> export
+	// function text matches Attrs function, but inlined to save an alloc
 	for len(args) > 0 {
-		var a Attr
 		switch arg := args[0].(type) {
 		case string:
 			if len(args) == 1 {
-				a = slog.String(arg, missingArg)
-				args = args[1:]
-			} else {
-				a = slog.Any(arg, args[1])
-				args = args[2:]
+				s.export = append(s.export, slog.String(arg, missingArg))
+				return
 			}
+			s.export = append(s.export, slog.Any(arg, args[1]))
+			args = args[2:]
 		case Attr:
-			a = arg
+			s.export = append(s.export, arg)
+			args = args[1:]
+		case []Attr:
+			s.export = append(s.export, arg...)
+		case slog.LogValuer:
+			v := arg.LogValue().Resolve()
+			if v.Kind() == slog.GroupKind {
+				s.export = append(s.export, v.Group()...)
+			} else {
+				s.export = append(s.export, slog.Any(missingKey, arg))
+			}
 			args = args[1:]
 		default:
-			a = slog.Any(missingKey, arg)
+			s.export = append(s.export, slog.Any(missingKey, arg))
 			args = args[1:]
 		}
-
-		s.insert(a)
 	}
 
+	// match export
 	for _, a := range s.export {
-		s.match(scope, a)
+		s.match(scope, a, replace)
 	}
 }
 
 // root of matching invocation
 // here, an attr key is known to be needed for interpolation
 // match attempts to puts the right value in the dictionary
-func (s *splicer) match(scope string, a Attr) {
+func (s *splicer) match(scope string, a Attr, replace func(Attr) Attr) {
 	// match if raw attr key is found in dictionary
 	if _, found := s.dict[a.Key]; found {
-		if s.replace != nil {
-			a = s.replace(a)
+		if replace != nil {
+			a = replace(a)
 		}
 		s.dict[a.Key] = a.Value
 		return
@@ -193,8 +197,8 @@ func (s *splicer) match(scope string, a Attr) {
 
 	// match if given prefix + attr key is found in dictionary
 	if _, found := s.dict[scope+a.Key]; found {
-		if s.replace != nil {
-			a = s.replace(a)
+		if replace != nil {
+			a = replace(a)
 		}
 		s.dict[scope+a.Key] = a.Value
 		return
@@ -208,7 +212,7 @@ func (s *splicer) match(scope string, a Attr) {
 		s.scratch = append(s.scratch, a.Key...)
 		s.scratch = append(s.scratch, '.')
 
-		s.matchRec(a.Value.Group(), gpos)
+		s.matchRec(a.Value.Group(), gpos, replace)
 
 		// pop attr key
 		s.scratch = s.scratch[:gpos]
@@ -216,7 +220,7 @@ func (s *splicer) match(scope string, a Attr) {
 }
 
 // recursive matching invocation
-func (s *splicer) matchRec(group []Attr, gpos int) {
+func (s *splicer) matchRec(group []Attr, gpos int, replace func(Attr) Attr) {
 	// store a marker that deliminates s.scratch state per attr operation
 	apos := len(s.scratch)
 
@@ -227,8 +231,8 @@ func (s *splicer) matchRec(group []Attr, gpos int) {
 		// match
 		key := string(s.scratch[gpos:])
 		if _, found := s.dict[key]; found {
-			if s.replace != nil {
-				a = s.replace(a)
+			if replace != nil {
+				a = replace(a)
 			}
 			s.dict[key] = a.Value
 		}
@@ -237,7 +241,7 @@ func (s *splicer) matchRec(group []Attr, gpos int) {
 		// (keep gpos invariant through matchRec)
 		if a.Value.Kind() == slog.GroupKind {
 			s.scratch = append(s.scratch, '.')
-			s.matchRec(a.Value.Group(), gpos)
+			s.matchRec(a.Value.Group(), gpos, replace)
 		}
 
 		// pop attr key
@@ -270,6 +274,10 @@ func (s *splicer) writeArg(arg any, verb []byte) {
 	switch arg := arg.(type) {
 	case Attr:
 		s.writeValue(arg.Value, verb)
+	case []Attr:
+		s.writeGroup(arg)
+	case slog.LogValuer:
+		s.writeValue(arg.LogValue(), verb)
 	default:
 		s.writeValue(slog.AnyValue(arg), verb)
 	}
@@ -370,13 +378,13 @@ func (s *splicer) writeError(err error) {
 }
 
 func (s *splicer) writeGroup(as []Attr) {
-	next := byte('{')
+	next := byte('[')
 	for _, a := range as {
 		s.writeByte(next)
 		s.writeString(a.Key)
-		s.writeByte(':')
+		s.writeByte('=')
 		s.writeValueNoVerb(a.Value)
 		next = ' '
 	}
-	s.writeByte('}')
+	s.writeByte(']')
 }

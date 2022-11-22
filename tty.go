@@ -5,94 +5,189 @@ import (
 	"io"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/exp/slog"
 )
 
-type ttyField int
-
-const (
-	ttyTimeField ttyField = iota
-	ttyLevelField
-	ttyLabelField
-	ttyMessageField
-	ttyAttrsField
-	ttySourceField
-)
-
 // TTY HANDLER
 
+// TTY is a component that displays log lines.
+//
+// A TTY is a [slog.Handler], an [io.StringWriter], and an [io.Closer].
+//
+// On creation, a [TTY] detects whether it is writing to a terminal.
+// If not, log lines are are written to the writer by a [slog.JSONHandler].
+//
+// Additionally, a TTY constructs [Logger]s:
+//   - [TTY.Logger] emits complete log lines
+//   - [TTY.Printer] just emits log messages
 type TTY struct {
-	level    slog.Leveler
-	seg      []Attr
+	enc *ttyEncoder
+
+	attrs    []Attr
 	attrText []byte
-	labels   string
-	label    string
-	enc      *ttyEncoder
+	scope    string
+	label    Attr
 }
 
-// Logger returns a [Logger] that uses the TTY as a handler.
-func (tty *TTY) Logger() Logger {
-	return Logger{h: tty}
+// ttyEncoder manages state relevant to encoding a record to bytes
+type ttyEncoder struct {
+	sink *ttySink
+
+	fields     []ttyField
+	timeFormat string
+	colors     bool
+	elapsed    bool
+	addSource  bool
 }
 
-// Printer returns a Logger using a near-clone of the TTY configuration.
-// Notably, the printer only emits label and message fields.
-func (tty *TTY) Printer() Logger {
-	return Logger{
-		h: &TTY{
-			level:    tty.level,
-			seg:      tty.seg,
-			attrText: tty.attrText,
-			labels:   tty.labels,
-			label:    tty.label,
-			enc: &ttyEncoder{
-				w:          tty.enc.w,
-				mu:         tty.enc.mu,
-				colors:     tty.enc.colors,
-				addLabel:   true,
-				timeFormat: tty.enc.timeFormat,
-				start:      tty.enc.start,
-				layout:     []ttyField{ttyMessageField},
-				spin: spinner{
-					enabled: false,
-					level:   tty.level,
-					cap:     0,
-				},
-			},
-		},
+// ttySink manages state relevant to writing bytes on-screen (or wherever)
+type ttySink struct {
+	ref     slog.LevelVar
+	refBase slog.Leveler
+	w       io.Writer
+	refresh *time.Ticker
+	done    chan struct{}
+	mu      *sync.Mutex
+	start   time.Time
+	replace func(Attr) Attr
+
+	// stream buffer
+	stream ttyStream
+	enabled bool
+}
+
+type ttyStream struct {
+	logLevel  slog.Level
+	holdLevel slog.Level
+	hold      spinner
+	sample    spinner
+	enabled   bool
+}
+
+type spinner struct {
+	lines      []string
+	cap        int
+	i, written int
+}
+
+func (tty *TTY) bounceJSON() *Logger {
+	cfg := &Config{
+		w:	tty.enc.sink.w,
+		ref: &tty.enc.sink.ref,
+		replace: tty.enc.sink.replace,
+		addSource: tty.enc.addSource,
 	}
+
+	log := cfg.JSON()
+
+	log.With(tty.attrs)
+	if tty.scope != "" {
+		for _, name := range strings.Split(tty.scope, "."){
+			log.Group(name)
+		}
+	}
+
+	return log
 }
 
-// Enabled reports whether the TTY is enabled for the given level.
-// If the TTY uses a spin buffer (see [Config.Spin]), the TTY is enabled at or above the spin buffer's level.
-// Otherwise, the TTY is enabled at or above the TTY's level.
+// Logger returns a [Logger] that uses the [TTY] as a handler.
+func (tty *TTY) Logger() *Logger {
+	if !tty.enc.sink.enabled {
+		return tty.bounceJSON()
+	}
+
+	return &Logger{h: tty}
+}
+
+// LogValue returns a [slog.Value], of [slog.GroupKind].
+// The group of [Attr]s is the collection of attributes present in log lines handled by the [TTY].
+func (tty *TTY) LogValue() slog.Value {
+	return slog.GroupValue(tty.attrs...)
+}
+
+// StartTimeNow sets a start time used when reporting elapsed time.
+func (tty *TTY) StartTimeNow() {
+	tty.enc.sink.mu.Lock()
+	defer tty.enc.sink.mu.Unlock()
+
+	tty.enc.sink.start = time.Now()
+}
+
+// WriteString satisfies the [io.StringWriter] interface.
+// It is safe to call Write concurrently with other methods that write [TTY] output.
+// A trailing newline is appended to the string.
+// Write trims the [TTY]'s spin buffer, if enabled.
+// If a program detects that a [TTY] does not write to a terminal device, WriteString is a no-op.
+func (tty *TTY) WriteString(s string) (n int, err error) {
+	if !tty.enc.sink.enabled {
+		return 0, nil
+	}
+
+	tty.enc.sink.mu.Lock()
+	defer tty.enc.sink.mu.Unlock()
+
+	if tty.enc.sink.stream.enabled {
+		tty.enc.sink.stream.sample.hide(tty.enc.sink.w)
+		tty.enc.sink.stream.hold.hide(tty.enc.sink.w)
+		defer func() {
+			tty.enc.sink.stream.hold.show(tty.enc.sink.w)
+		}()
+	}
+
+	return io.WriteString(tty.enc.sink.w, s+"\n")
+}
+
+// Close satisfies the [io.Closer] interface.
+// It should be called:
+//   - to invoke Close on a [TTY]'s writer
+//   - on a streaming [TTY], to trim on-screen output and prevent a go routine leak.
+func (tty *TTY) Close() error {
+	tty.enc.sink.mu.Lock()
+	defer tty.enc.sink.mu.Unlock()
+
+	if tty.enc.sink.stream.enabled {
+		tty.enc.sink.refresh.Stop()
+		tty.enc.sink.stream.hold.hide(tty.enc.sink.w)
+		tty.enc.sink.stream.sample.hide(tty.enc.sink.w)
+		close(tty.enc.sink.done)
+	}
+
+	if wc, isCloser := tty.enc.sink.w.(io.Closer); isCloser {
+		return wc.Close()
+	}
+
+	return nil
+}
+
+// HANDLER
+
+// Enabled reports whether the [TTY] is enabled for logging at the given level.
+// If the [TTY]'s spin buffer is enabled, the [TTY] is enabled at or above the spin buffer's reference level.
+// Otherwise, the [TTY] is enabled at or above the [TTY]'s  reference level.
 func (tty *TTY) Enabled(level slog.Level) bool {
-	return tty.enabled(level)
+	return level >= tty.enc.sink.ref.Level()
 }
 
-func (tty *TTY) enabled(level slog.Level) bool {
-	if !tty.enc.spin.enabled {
-		return level >= tty.level.Level()
-	}
-	return level >= tty.enc.spin.level.Level()
+// With differs from [WithAttrs] only in that it returns a *TTY.
+func (tty *TTY) With(args ...any) *TTY {
+	return tty.WithAttrs(Attrs(args...)).(*TTY)
 }
 
-// WithAttrs adds Attrs to the TTY.
-// See also: [slog.WithAttrs]
+// See [slog.WithAttrs].
 func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
-	return tty.withAttrs(as).(*TTY)
-}
+	tty2 := &TTY{
+		scope: tty.scope,
+		label: tty.label,
+		enc:   tty.enc,
+	}
 
-func (tty *TTY) withAttrs(as []Attr) handler {
-	tty2 := new(TTY)
-
-	tty2.level = tty.level
-	tty2.labels = tty.labels
-	tty2.label = tty.label
-	tty2.enc = tty.enc
+	// attr copy & extend
+	scoped := scopeAttrs(tty.scope, as, tty.enc.sink.replace)
+	tty2.attrs = concat(tty.attrs, scoped)
 
 	// attr text copy & extend
 	tty2.attrText = make([]byte, len(tty.attrText))
@@ -102,68 +197,67 @@ func (tty *TTY) withAttrs(as []Attr) handler {
 		tty2.attrText = append(tty2.attrText, ' ')
 	}
 
+	// for consistency, use splicer methods to write attr text
 	s := newSplicer()
 	defer s.free()
 
-	for i, a := range as {
-		if tty.enc.replace != nil {
-			a = tty.enc.replace(a)
-		}
-
-		pop := tty.enc.pushStyle(s, dimStyle)
-		s.writeString(tty.labels)
+	for i, a := range scoped {
+		tty.enc.pushStyle(s, dimStyle)
 		s.writeString(a.Key)
 		s.writeByte('=')
-		pop()
+		tty.enc.popStyle(s)
 
-		pop = tty.enc.pushStyle(s, attrStyle)
+		tty.enc.pushStyle(s, attrStyle)
 		s.writeValueNoVerb(a.Value)
-		pop()
+		tty.enc.popStyle(s)
 
 		if i < len(as)-1 {
 			s.writeByte(' ')
 		}
 	}
 
+	// append attr text
 	tty2.attrText = append(tty2.attrText, s.line()...)
-
-	// segment copy & extend
-	scoped := scopeSegment(tty.labels, as)
-	tty2.seg = concat(tty.seg, scoped)
 
 	return tty2
 }
 
-// WithGroup opens a new group of Attrs associated with the TTY.
-// Attrs appended to the TTY or logged later are members of this group.
-// See also: [slog.Handler.WithGroup]
+// See [slog.Handler.WithGroup].
 func (tty *TTY) WithGroup(name string) slog.Handler {
-	return tty.withGroup(name).(*TTY)
-}
-
-func (tty *TTY) withGroup(label string) handler {
 	return &TTY{
-		level:    tty.level,
-		seg:      tty.seg,
+		attrs:    tty.attrs,
 		attrText: tty.attrText,
-		labels:   tty.labels + label + ".",
-		label:    label,
+		scope:    tty.scope + name + ".",
+		label:    tty.label,
 		enc:      tty.enc,
 	}
 }
 
+func (tty *TTY) withLabel(label string) handler {
+	return &TTY{
+		attrs:    tty.attrs,
+		attrText: tty.attrText,
+		scope:    tty.scope,
+		label:    slog.String(labelKey, label),
+		enc:      tty.enc,
+	}
+}
+
+// Handle logs the given [slog.Record] to [TTY] output.
 func (tty *TTY) Handle(r slog.Record) error {
 	var args []any
 	r.Attrs(func(a Attr) {
 		args = append(args, a)
 	})
 
-	if file, line := r.SourceLine(); file != "" {
-		file += strconv.Itoa(line)
-		args = append(args, slog.String("source", file+":"+strconv.Itoa(line)))
+	if tty.enc.addSource {
+		if file, line := r.SourceLine(); file != "" {
+			file += strconv.Itoa(line)
+			args = append(args, slog.String("source", file+":"+strconv.Itoa(line)))
+		}
 	}
 
-	return tty.handle(r.Level, r.Message, nil, 0, args)
+	return tty.handle(r.Level, r.Message, nil, -1, args)
 }
 
 func (tty *TTY) handle(
@@ -176,45 +270,33 @@ func (tty *TTY) handle(
 	s := newSplicer()
 	defer s.free()
 
-	s.replace = tty.enc.replace
 	args = s.scan(msg, args)
-	s.join(tty.labels, tty.seg, args)
+	s.join(tty.scope, tty.attrs, args, tty.enc.sink.replace)
 
 	var sep bool
-	for _, field := range tty.enc.layout {
-		if sep {
-			s.writeString("  ")
-		}
-
+	for _, field := range tty.enc.fields {
 		switch field {
 		case ttyTimeField:
-			tty.encTime(s)
-			sep = true
+			sep = tty.encTime(s, sep)
 		case ttyLevelField:
-			tty.encLevel(s, level)
-			sep = true
+			sep = tty.encLevel(s, level, sep)
 		case ttyMessageField:
-			tty.encMsg(s, msg, err)
-			sep = len(msg) > 0 || err != nil
+			sep = tty.encMsg(s, msg, err, sep)
 		case ttyAttrsField:
-			if len(tty.attrText)+len(s.export) == 0 {
-				sep = false
-			} else {
-				tty.encAttrs(s)
-				sep = true
-			}
+			sep = tty.encAttrs(s, sep)
 		case ttySourceField:
-			tty.encSource(s, depth)
-			sep = true
+			if depth >= 0 {
+				tty.encSource(s, depth, sep)
+			}
 		}
 	}
 
 	s.writeByte('\n')
 
-	tty.enc.mu.Lock()
-	defer tty.enc.mu.Unlock()
+	tty.enc.sink.mu.Lock()
+	defer tty.enc.sink.mu.Unlock()
 
-	tty.enc.writeLine(level, tty.level.Level(), s.line())
+	tty.enc.sink.writeLine(level, s.line())
 
 	return nil
 }
@@ -224,115 +306,294 @@ func (tty *TTY) fmt(
 	err error,
 	args []any,
 ) (string, error) {
+	// shortcut: no err, no msg -> return
+	if err == nil && len(msg) == 0 {
+		return msg, err
+	}
+
+	// shortcut: no msg, extant err, no label -> return err
+	if err != nil && len(msg) == 0 {
+		if tty.label == noLabel {
+			return msg, err
+		} else {
+			err = fmt.Errorf("%s: %w", tty.label.Value.String(), err)
+			msg = err.Error()
+			return msg, err			
+		}
+	}
+
+	// interpolate...
 	s := newSplicer()
 	defer s.free()
 
-	s.replace = tty.enc.replace
-	s.join(tty.labels, tty.seg, s.scan(msg, args))
+	s.join(tty.scope, tty.attrs, s.scan(msg, args), tty.enc.sink.replace)
 	s.ipol(msg)
 
+	// err -> return error string, err
 	if err != nil && len(msg) > 0 {
 		s.writeString(": %w")
 		err = fmt.Errorf(s.line(), err)
 		msg = err.Error()
-	} else {
+		return msg, err
+	}
+
+	// no err -> return msg string, nil
+	if len(msg) > 0 {
 		msg = s.line()
+		return msg, err
 	}
 
 	return msg, err
 }
 
-func (tty *TTY) LogValue() slog.Value {
-	return slog.GroupValue(tty.seg...)
-}
+// ENCODE
 
-// TTY ENCODER
+type ttyField int
 
-type ttyEncoder struct {
-	// writer
-	w  io.Writer
-	mu *sync.Mutex
+const (
+	ttyTimeField ttyField = iota
+	ttyLevelField
+	ttyLabelField
+	ttyMessageField
+	ttyAttrsField
+	ttySourceField
+)
 
-	// encoding
-	layout     []ttyField
-	spin       spinner
-	timeFormat string
-	start      time.Time
-	replace    func(Attr) Attr
-
-	elapsed   bool
-	addLabel  bool
-	colors    bool
-	addSource bool
-}
-
-// SPIN
-
-type spinner struct {
-	level      slog.Leveler
-	lines      []string
-	cap        int
-	i, written int
-	enabled    bool
-}
-
-func (tty *TTY) Write(p []byte) (n int, err error) {
-	tty.enc.mu.Lock()
-	defer tty.enc.mu.Unlock()
-
-	// trim encoder feed
-	if tty.enc.spin.enabled {
-		tty.enc.spin.clear(tty.enc.w)
-		tty.enc.spin.lines = tty.enc.spin.lines[:0]
-		tty.enc.spin.i = 0
+func encSep(s *splicer, sep bool) {
+	if sep {
+		s.writeString("  ")
 	}
-
-	return tty.enc.w.Write(p)
 }
 
-func (enc *ttyEncoder) writeLine(level slog.Level, ref slog.Level, line string) {
-	if level >= ref {
-		enc.spin.clear(enc.w)
-		io.WriteString(enc.w, line)
-		enc.spin.show(enc.w)
+func (tty *TTY) encTime(s *splicer, sep bool) bool {
+	encSep(s, sep)
+	tty.enc.pushStyle(s, dimStyle)
+	if tty.enc.elapsed {
+		d := time.Since(tty.enc.sink.start).Round(time.Second)
+		s.text = appendDuration(s.text, d)
 	} else {
-		enc.spin.insertLine(enc.w, line)
+		s.writeTimeVerb(time.Now(), tty.enc.timeFormat)
 	}
+	tty.enc.popStyle(s)
+	return sep
 }
 
-func (s *spinner) insertLine(w io.Writer, line string) {
-	if len(s.lines) < s.cap {
-		s.lines = append(s.lines, line)
-	} else {
-		s.lines[s.i] = line
-	}
-	s.i = (s.i + 1) % len(s.lines)
+func (tty *TTY) encLevel(s *splicer, level slog.Level, sep bool) bool {
+	// compute padding
+	n := len(level.String())
 
-	s.clear(w)
-	s.show(w)
+	pad := (12 - n) / 2
+	padl := n % 2
+
+	// leftpad
+	for i := 0; i < pad + padl - 1; i++ {
+		s.writeByte(' ')
+	}
+
+	// map level -> style
+	var style string
+	switch {
+	case level < INFO:
+		style = debugStyle
+	case level < WARN:
+		style = infoStyle
+	case level < ERROR:
+		style = warnStyle
+	default:
+		style = errStyle
+	}
+
+	// encode
+	tty.enc.pushStyle(s, style)
+	s.writeString(level.String())
+	tty.enc.popStyle(s)
+
+	// rightpad
+	for i := 0; i < pad; i++ {
+		s.writeByte(' ')
+	}
+	return sep
 }
 
-func (s *spinner) clear(w io.Writer) {
-	for i := 0; i < s.written; i++ {
-		io.WriteString(w, "\x1b[1A\x1b[2K")
+func (tty *TTY) encMsg(s *splicer, msg string, err error, sep bool) bool {
+	if tty.label != noLabel {
+		sep = tty.encLabel(s, sep)
 	}
-	s.written = 0
-}
 
-func (s *spinner) show(w io.Writer) {
-	if len(s.lines) < s.cap {
-		for i := 0; i < s.i; i++ {
-			io.WriteString(w, s.lines[i])
-			s.written++
+	if len(msg) == 0 && err == nil {
+		return sep
+	}
+
+	encSep(s, sep)
+
+	// interpolate message
+	tty.enc.pushStyle(s, msgStyle)
+	if !s.ipol(msg) {
+		s.writeString(msg)
+	}
+	tty.enc.popStyle(s)
+
+	// merge error into message
+	if err != nil {
+		if len(msg) > 0 {
+			s.writeString(": ")
 		}
+
+		tty.enc.pushStyle(s, errStyle)
+		s.writeString(err.Error())
+		tty.enc.popStyle(s)
+	}
+	return true
+}
+
+// encodes a label, if it exists
+func (tty *TTY) encLabel(s *splicer, sep bool) bool {
+	tty.enc.pushStyle(s, dimStyle)
+	s.writeString(tty.label.Value.String())
+	tty.enc.popStyle(s)
+
+	s.writeRune(' ')
+	return false
+}
+
+func (tty *TTY) encAttrs(s *splicer, sep bool) bool {
+	if len(tty.attrText) + len(s.export) == 0 {
+		return sep
+	}
+
+	encSep(s, sep)
+
+	// write preformatted attr text
+	s.Write(tty.attrText)
+
+	// write splicer exports
+	space := len(tty.attrText) > 0
+	for _, a := range s.export {
+		if tty.enc.sink.replace != nil {
+			a = tty.enc.sink.replace(a)
+		}
+
+		if space {
+			s.writeByte(' ')
+		}
+
+		if a.Value.Kind() == slog.GroupKind {
+			tty.encGroup(s, a.Key, a)
+			continue
+		}
+
+		switch a.Key {
+		case "":
+			continue
+		case "source":
+			defer func() {
+				if space {
+					s.writeString("  ")
+				}
+
+				tty.enc.pushStyle(s, srcStyle)
+				s.writeString(a.Value.String())
+				tty.enc.popStyle(s)
+			}()
+			continue
+		case "err":
+			tty.encAttrErr(s, a)
+			space = true
+			continue
+		}
+
+		tty.enc.pushStyle(s, dimStyle)
+		s.writeString(tty.scope)
+		s.writeString(a.Key)
+		s.writeByte('=')
+		tty.enc.popStyle(s)
+
+		tty.enc.pushStyle(s, attrStyle)
+		s.writeValueNoVerb(a.Value)
+		tty.enc.popStyle(s)
+	}
+	return true
+}
+
+// encodes an error with error styling
+func (tty *TTY) encAttrErr(s *splicer, a Attr) {
+	tty.enc.pushStyle(s, dimStyle)
+	s.writeString(tty.scope)
+	s.writeString(a.Key)
+	s.writeByte('=')
+	tty.enc.popStyle(s)
+
+	tty.enc.pushStyle(s, errStyle)
+	s.writeValueNoVerb(a.Value)
+	tty.enc.popStyle(s)
+}
+
+// encodes a group with [key=val]-style text
+func (tty *TTY) encGroup(s *splicer, name string, a Attr) {
+	tty.enc.pushStyle(s, dimStyle)
+	s.writeByte('[')
+	tty.enc.popStyle(s)
+
+	group := a.Value.Group()
+	sep := false
+	for _, a := range group {
+		if tty.enc.sink.replace != nil {
+			a = tty.enc.sink.replace(a)
+		}
+
+		if a.Value.Kind() == slog.GroupKind {
+			tty.encGroup(s, a.Key, a)
+			continue
+		}
+		
+		if a.Key == "" {
+			continue
+		}
+
+		if sep {
+			s.writeByte(' ')
+		}
+
+		tty.enc.pushStyle(s, dimStyle)
+		s.writeString(name)
+		s.writeByte('.')
+		s.writeString(a.Key)
+		s.writeByte('=')
+		tty.enc.popStyle(s)
+
+		tty.enc.pushStyle(s, attrStyle)
+		s.writeValueNoVerb(a.Value)
+		tty.enc.popStyle(s)
+
+		sep = true
+	}
+
+	tty.enc.pushStyle(s, dimStyle)
+	s.writeByte(']')
+	tty.enc.popStyle(s)
+}
+
+func (tty *TTY) encSource(s *splicer, depth int, sep bool) {
+	if !tty.enc.addSource {
 		return
 	}
 
-	for i := range s.lines {
-		i = (i + s.i) % len(s.lines)
-		io.WriteString(w, s.lines[i])
-		s.written++
-	}
+	encSep(s, sep)
+
+	tty.enc.pushStyle(s, srcStyle)
+
+	// yank source from runtime
+	u := [1]uintptr{}
+	runtime.Callers(4+depth, u[:])
+	pc := u[0]
+	src, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+
+	// encode file/line
+	s.writeString(src.File)
+	s.writeByte(':')
+	s.text = strconv.AppendInt(s.text, int64(src.Line), 10)
+
+	tty.enc.popStyle(s)
 }
 
 // STYLES
@@ -351,190 +612,115 @@ const (
 	errStyle   = "\x1b[31;1m"
 )
 
-func (enc *ttyEncoder) pushStyle(s *splicer, style string) func() {
+func (enc *ttyEncoder) pushStyle(s *splicer, style string) {
 	if !enc.colors {
-		return func() {}
-	}
-
-	s.writeString(style)
-	return func() {
-		s.writeString(closeStyle)
-	}
-}
-
-// ENCODE
-
-func (tty *TTY) encTime(s *splicer) {
-	pop := tty.enc.pushStyle(s, dimStyle)
-	if tty.enc.elapsed {
-		d := time.Since(tty.enc.start).Round(time.Second)
-		s.text = appendDuration(s.text, d)
-	} else {
-		s.writeTimeVerb(time.Now(), tty.enc.timeFormat)
-	}
-	pop()
-}
-
-func (tty *TTY) encLevel(s *splicer, level slog.Level) {
-	// compute padding
-	n := len(level.String())
-	padl := (7 - n) / 2
-	padr := (8 - n) / 2
-
-	// leftpad
-	for i := 0; i < padl; i++ {
-		s.writeByte(' ')
-	}
-
-	// map level -> style
-	var style string
-	switch {
-	case level < INFO:
-		style = debugStyle
-	case level < WARN:
-		style = infoStyle
-	case level < ERROR:
-		style = warnStyle
-	default:
-		style = errStyle
-	}
-
-	// encode
-	pop := tty.enc.pushStyle(s, style)
-	s.writeString(level.String())
-	pop()
-
-	// rightpad
-	for i := 0; i < padr; i++ {
-		s.writeByte(' ')
-	}
-}
-
-func (tty *TTY) encMsg(s *splicer, msg string, err error) {
-	// if configured, add label
-	if tty.enc.addLabel {
-		tty.encLabel(s)
-	}
-
-	// interpolate message
-	pop := tty.enc.pushStyle(s, msgStyle)
-	s.ipol(msg)
-	pop()
-
-	// merge error into message
-	if err != nil {
-		if len(msg) > 0 {
-			s.writeString(": ")
-		}
-		pop := tty.enc.pushStyle(s, errStyle)
-		s.writeString(err.Error())
-		pop()
-	}
-}
-
-func (tty *TTY) encLabel(s *splicer) {
-	if len(tty.label) == 0 {
 		return
 	}
 
-	pop := tty.enc.pushStyle(s, dimStyle)
-	s.writeString(tty.label)
-	pop()
-
-	s.writeString("  ")
+	s.writeString(style)
 }
 
-func (tty *TTY) encAttrs(s *splicer) {
-	// write preformatted attr text
-	s.Write(tty.attrText)
-
-	// write splicer exports
-	sep := len(tty.attrText) > 0
-	for _, a := range s.export {
-		if tty.enc.replace != nil {
-			a = tty.enc.replace(a)
-		}
-
-		if len(a.Key) == 0 {
-			continue
-		}
-
-		if sep {
-			s.writeByte(' ')
-		}
-
-		if a.Value.Kind() == slog.GroupKind {
-			tty.encGroup(s, a.Key, a)
-			continue
-		}
-
-		pop := tty.enc.pushStyle(s, dimStyle)
-		s.writeString(tty.labels)
-		s.writeString(a.Key)
-		s.writeByte('=')
-		pop()
-
-		pop = tty.enc.pushStyle(s, attrStyle)
-		s.writeValueNoVerb(a.Value)
-		pop()
-
-		sep = true
+func (enc *ttyEncoder) popStyle(s *splicer) {
+	if !enc.colors {
+		return
 	}
 
-	return
+	s.writeString(closeStyle)
 }
 
-func (tty *TTY) encGroup(s *splicer, name string, a Attr) {
-	pop := tty.enc.pushStyle(s, dimStyle)
-	s.writeByte('[')
-	pop()
+// BUFFERS
 
-	group := a.Value.Group()
-	sep := false
-	for _, a := range group {
-		if tty.enc.replace != nil {
-			a = tty.enc.replace(a)
-		}
-
-		if a.Value.Kind() == slog.GroupKind {
-			tty.encGroup(s, a.Key, a)
-			continue
-		}
-
-		if sep {
-			s.writeByte(' ')
-		}
-
-		pop := tty.enc.pushStyle(s, dimStyle)
-		s.writeString(name)
-		s.writeByte('.')
-		s.writeString(a.Key)
-		s.writeByte('=')
-		pop()
-
-		pop = tty.enc.pushStyle(s, attrStyle)
-		s.writeValueNoVerb(a.Value)
-		pop()
-		sep = true
+func (sink *ttySink) writeLine(level slog.Level, line string) {
+	if !sink.stream.enabled {
+		io.WriteString(sink.w, line)
+		return
 	}
-	pop = tty.enc.pushStyle(s, dimStyle)
-	s.writeByte(']')
-	pop()
+
+	sink.stream.insertLine(sink.w, level, line)
+
+	// if too many samples are written, set ref level to ignore more
+	if sink.stream.sample.written >= len(sink.stream.sample.lines) {
+		sink.ref.Set(sink.stream.holdLevel)
+	}
 }
 
-func (tty *TTY) encSource(s *splicer, depth int) {
-	pop := tty.enc.pushStyle(s, srcStyle)
+func (s *ttyStream) insertLine(w io.Writer, level slog.Level, line string) {
+	switch {
+	// draw logLevel events to screen
+	case level >= s.logLevel:
+		s.hold.hide(w)
+		s.sample.hide(w)
+		io.WriteString(w, line)
+		s.hold.show(w)
+		s.sample.show(w)
+	// otherwise, insert into buffers
+	case level >= s.holdLevel:
+		s.hold.insertLine(w, line)
+	default:
+		s.sample.insertLine(w, line)
+	}
+}
 
-	// yank source from runtime
-	u := [1]uintptr{}
-	runtime.Callers(4+depth, u[:])
-	pc := u[0]
-	src, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+func (s *spinner) insertLine(w io.Writer, line string) {
+	if s == nil {
+		return
+	}
 
-	// encode file/line
-	s.writeString(src.File)
-	s.writeByte(':')
-	s.text = strconv.AppendInt(s.text, int64(src.Line), 10)
+	if len(s.lines) < s.cap {
+		s.lines = append(s.lines, line)
+	} else {
+		s.lines[s.i] = line
+	}
+	s.i = (s.i + 1) % len(s.lines)
+}
 
-	pop()
+func (s *spinner) hide(w io.Writer) {
+	if s == nil {
+		return
+	}
+
+	for i := 0; i < s.written; i++ {
+		io.WriteString(w, "\x1b[1A\x1b[2K")
+	}
+	s.written = 0
+}
+
+func (s *spinner) show(w io.Writer) {
+	if s == nil {
+		return
+	}
+
+	if len(s.lines) < s.cap {
+		for i := 0; i < s.i; i++ {
+			io.WriteString(w, s.lines[i])
+			s.written++
+		}
+		return
+	}
+
+	for i := range s.lines {
+		i = (i + s.i) % len(s.lines)
+		io.WriteString(w, s.lines[i])
+		s.written++
+	}
+}
+
+// update loop refreshes on-screen buffers for each tick of refresh
+func (sink *ttySink) update() {
+	go func() {
+		for {
+			select {
+			case <-sink.refresh.C:
+				sink.mu.Lock()
+				sink.stream.hold.hide(sink.w)
+				sink.stream.sample.hide(sink.w)
+				sink.stream.hold.show(sink.w)
+				sink.stream.sample.show(sink.w)
+				sink.ref.Set(sink.refBase.Level())
+				sink.mu.Unlock()
+			case <-sink.done:
+				return
+			}
+		}
+	}()
 }

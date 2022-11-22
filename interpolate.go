@@ -8,9 +8,9 @@ import (
 
 // SCAN
 
-// scan occurs before interpolation and before joining (seg, ctx, args)
+// scan occurs before interpolation and before joining
 //   - prematches for keyed interpolation are detected and added to the dictionary
-//   - partitions args that are and are not consumed by unkeyed interpolation
+//   - returns args not consumed by unkeyed interpolations
 func (s *splicer) scan(msg string, args []any) []any {
 	var clip string
 	var found bool
@@ -21,6 +21,7 @@ func (s *splicer) scan(msg string, args []any) []any {
 		if !found {
 			break
 		}
+		s.interpolates = true
 
 		key := s.scanClip(clip)
 		if len(key) > 0 {
@@ -125,7 +126,13 @@ func (s *splicer) scanUnescapeKey(key string) string {
 
 // INTERPOLATE
 
-func (s *splicer) ipol(msg string) {
+func (s *splicer) ipol(msg string) bool {
+	if !s.interpolates {
+		// s.writeString(msg)
+		// s.writeUnescape(msg)
+		return false
+	}
+
 	var clip []byte
 	var found bool
 	for {
@@ -134,6 +141,7 @@ func (s *splicer) ipol(msg string) {
 		}
 		s.ipolAttr(clip)
 	}
+	return true
 }
 
 // scan into unescaped left/right bracket pairs
@@ -146,7 +154,6 @@ func (s *splicer) ipolNext(msg string) (tail string, clip []byte, found bool) {
 	}
 
 	if msg, rpos = s.ipolUntilRune(msg, '}'); rpos < 0 {
-		s.writeString(missingRightBracket)
 		return "", nil, false
 	}
 
@@ -178,6 +185,24 @@ func (s *splicer) ipolUntilRune(msg string, sep rune) (tail string, n int) {
 		}
 	}
 	return "", -1
+}
+
+// alternative to ipolUntilRune
+// drops escaping, but doesn't interpolate
+func (s *splicer) writeUnescape(msg string) {
+	var esc bool
+	for _, r := range msg {
+		switch {
+		case esc:
+			esc = false
+			fallthrough
+		default:
+			s.writeRune(r)
+		case r == '\\':
+			esc = true
+		}
+	}
+	return
 }
 
 func (s *splicer) ipolAttr(clip []byte) {

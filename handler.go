@@ -7,90 +7,92 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+// handler minor
+// fmt allows the Logger.Fmt method
+// handle is oriented towards a later-binding Record contruction
+type handler interface {
+	slog.Handler
+	slog.LogValuer
+	withLabel(string) handler
+	fmt(string, error, []any) (string, error)
+	handle(slog.Level, string, error, int, []any) error
+}
+
+// Handler encapsulates a [slog.Handler] and maintains additional state required for message interpolation.
 type Handler struct {
-	seg       []Attr
-	labels    string
+	attrs     []Attr
+	scope     string
+	label     Attr
 	enc       slog.Handler
 	replace   func(Attr) Attr
 	addSource bool
 }
 
-// Enabled indicates whether a [Handler] is enabled for a given level
+// LogValue returns a [slog.Value], of [slog.GroupKind].
+// The group of [Attr]s is the collection of attributes present in log lines handled by the [Handler].
+func (h *Handler) LogValue() slog.Value {
+	return slog.GroupValue(h.attrs...)
+}
+
+// Encoder returns the [slog.Handler] encapsulated by a [Handler]
+func (h *Handler) Encoder() slog.Handler {
+	return h.enc
+}
+
+// See [slog.Handler.Enabled].
 func (h *Handler) Enabled(level slog.Level) bool {
 	return h.enc.Enabled(level)
 }
 
-// With extends the segment of [Attr]s associated with a [Handler]
-func (h *Handler) WithAttrs(seg []Attr) slog.Handler {
-	return h.withAttrs(seg).(*Handler)
+// See [slog.Handler.WithAttrs].
+func (h *Handler) WithAttrs(as []Attr) slog.Handler {
+	scopedSeg := scopeAttrs(h.scope, as, h.replace)
+
+	return &Handler{
+		attrs:     concat(h.attrs, scopedSeg),
+		scope:     h.scope,
+		label:     h.label,
+		enc:       h.enc.WithAttrs(as),
+		replace:   h.replace,
+		addSource: h.addSource,
+	}
 }
 
-// WithGroup opens a namespace. Every subsequent Attr key is prefixed with the name.
+// See [slog.Handler.WithGroup].
 func (h *Handler) WithGroup(name string) slog.Handler {
-	return h.withGroup(name).(*Handler)
+	return &Handler{
+		attrs:     h.attrs,
+		scope:     h.scope + name + ".",
+		label:     h.label,
+		enc:       h.enc.WithGroup(name),
+		replace:   h.replace,
+		addSource: h.addSource,
+	}
 }
 
-// Handle performs interpolation on a [slog.Record]'s message
-// The result is passed to another [slog.Handler]
+func (h *Handler) withLabel(label string) handler {
+	return &Handler{
+		attrs:     h.attrs,
+		scope:     h.scope,
+		label:     slog.String(labelKey, label),
+		enc:       h.enc,
+		replace:   h.replace,
+		addSource: h.addSource,
+	}
+}
+
+// Handle performs interpolation on a [slog.Record] message.
+// The record is then handled by an encapsulated [slog.Handler].
 func (h *Handler) Handle(r slog.Record) error {
 	s := newSplicer()
 	defer s.free()
 
-	s.replace = h.replace
 	s.scan(r.Message, nil)
-	s.join(h.labels, h.seg, nil)
+	s.join(h.scope, h.attrs, nil, h.replace)
 	s.ipol(r.Message)
 	r.Message = s.line()
 
 	return h.enc.Handle(r)
-}
-
-func (h *Handler) LogValue() slog.Value {
-	return slog.GroupValue(h.seg...)
-}
-
-// handler minor ...
-
-type handler interface {
-	fmt(string, error, []any) (string, error)
-	handle(slog.Level, string, error, int, []any) error
-	withAttrs([]Attr) handler
-	withGroup(string) handler
-	enabled(slog.Level) bool
-}
-
-func (h *Handler) enabled(level slog.Level) bool {
-	return h.Enabled(level)
-}
-
-func (h *Handler) withAttrs(seg []Attr) handler {
-	scopedSeg := scopeSegment(h.labels, seg)
-
-	return &Handler{
-		seg:       concat(h.seg, scopedSeg),
-		labels:    h.labels,
-		enc:       h.enc.WithAttrs(seg),
-		addSource: h.addSource,
-		replace:   h.replace,
-	}
-}
-
-func (h *Handler) withGroup(name string) handler {
-	return &Handler{
-		seg:       h.seg,
-		labels:    h.labels + name + ".",
-		enc:       h.enc.WithGroup(name),
-		addSource: h.addSource,
-		replace:   h.replace,
-	}
-}
-
-func (h *Handler) attrs() []Attr {
-	return h.seg
-}
-
-func (h *Handler) scope() string {
-	return h.labels
 }
 
 func (h *Handler) handle(
@@ -103,12 +105,17 @@ func (h *Handler) handle(
 	s := newSplicer()
 	defer s.free()
 
-	s.replace = h.replace
-	s.join(h.labels, h.seg, s.scan(msg, args))
-	s.ipol(msg)
-
-	if err != nil {
-		s.writeError(err)
+	s.join(h.scope, h.attrs, s.scan(msg, args), h.replace)
+	if s.ipol(msg) {
+		if err != nil {
+			s.writeError(err)
+		}
+		msg = s.line()
+	} else if err != nil {
+		s.writeString(msg)
+		s.writeString(": ")
+		s.writeString(err.Error())
+		msg = s.line()
 	}
 
 	if h.addSource {
@@ -117,7 +124,11 @@ func (h *Handler) handle(
 		depth = 0
 	}
 
-	r := slog.NewRecord(time.Now(), level, s.line(), depth, nil)
+	r := slog.NewRecord(time.Now(), level, msg, depth, nil)
+	if h.label != noLabel {
+		r.AddAttrs(h.label)
+	}
+
 	r.AddAttrs(s.export...)
 
 	return h.enc.Handle(r)
@@ -128,34 +139,38 @@ func (h *Handler) fmt(
 	err error,
 	args []any,
 ) (string, error) {
+	// shortcut: no msg, err -> return labled error string, err
+	if err != nil && len(msg) == 0 && h.label != noLabel {
+		err = fmt.Errorf("%s: %w", h.label, err)
+		msg = err.Error()
+		return msg, err
+	}
+
+	// shortcut: no err, no msg -> return
+	if err == nil && len(msg) == 0 {
+		return msg, err
+	}
+
+	// interpolate...
 	s := newSplicer()
 	defer s.free()
 
-	s.join(h.labels, h.seg, s.scan(msg, args))
+	s.join(h.scope, h.attrs, s.scan(msg, args), h.replace)
 	s.ipol(msg)
 
+	// err -> return error string, err
 	if err != nil && len(msg) > 0 {
 		s.writeString(": %w")
 		err = fmt.Errorf(s.line(), err)
 		msg = err.Error()
-	} else {
+		return msg, err
+	}
+
+	// no err -> return msg string, nil
+	if len(msg) > 0 {
 		msg = s.line()
+		return msg, err
 	}
 
 	return msg, err
-}
-
-func scopeSegment(prefix string, seg []Attr) []Attr {
-	if prefix == "" {
-		return seg
-	}
-
-	pseg := make([]Attr, 0, len(seg))
-	for _, a := range seg {
-		pseg = append(pseg, Attr{
-			Key:   prefix + a.Key,
-			Value: a.Value,
-		})
-	}
-	return pseg
 }

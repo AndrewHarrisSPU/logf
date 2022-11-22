@@ -9,54 +9,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AndrewHarrisSPU/logf/testlog"
 	"golang.org/x/exp/slog"
 )
 
-func substringTestLogger(t *testing.T) (Logger, func(string)) {
-	var b bytes.Buffer
-
-	wantFunc := func(want string) {
-		t.Helper()
-		if !strings.Contains(b.String(), want) {
-			t.Errorf("\n\texpected %s\n\tin %s", want, b.String())
-		}
-		b.Reset()
-	}
-
-	log := New().
-		Writer(&b).
-		AddSource(true).
-		JSON()
-
-	return log, wantFunc
-}
-
 func TestDepth(t *testing.T) {
-	log, want := substringTestLogger(t)
-	fn := func() {
+	h, want := testlog.Substrings(t)
+	log := UsingHandler(h)
+
+	loc := func() {
 		log.Depth(1).Msg("where am I")
 	}
 
-	fn()
-	want("logger_test.go:40")
+	loc()
+	want("logger_test.go:24")
 
-	fn()
-	want("logger_test.go:43")
+	loc()
+	want("logger_test.go:27")
 
-	func() { fn() }()
-	want("logger_test.go:46")
+	func() { loc() }()
+	want("logger_test.go:30")
 
 	func() {
 		func() {
 			log.Depth(2).Msg("how deep am I")
 		}()
 	}()
-	want("logger_test.go:53")
+	want("logger_test.go:37")
 }
 
 // test modes of failure for malformed logging calls
 func TestMalformed(t *testing.T) {
-	log, want := substringTestLogger(t)
+	h, want := testlog.Substrings(t)
+	log := UsingHandler(h)
 
 	log.Msg("{}")
 	want(missingArg)
@@ -64,10 +49,7 @@ func TestMalformed(t *testing.T) {
 	log.Msg("{item}")
 	want(missingAttr)
 
-	log.Msg("{something")
-	want(missingRightBracket)
-
-	// only string in args - not enough for an Attr
+	// only a single string in args - not enough for an Attr
 	log.Msg("no interpolation", "not-a-key")
 	want(missingArg)
 
@@ -75,21 +57,22 @@ func TestMalformed(t *testing.T) {
 	log.Msg("no interpolation", 0)
 	want(missingKey)
 
+	// both xs appear, first wins for interpolation
+	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
+	want(`"msg":"1","x":1,"x":2`)
+
 	// both bools appear (no deduplication)
 	// also: second bool wins for interpolation
 	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
 	want(`"msg":"false","bit":true,"bit":false`)
-
-	// both xs appear, first wins for interpolation
-	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
-	want(`"msg":"1","x":1,"x":2`)
 }
 
 func TestEscaping(t *testing.T) {
-	log, want := substringTestLogger(t)
+	h, want := testlog.Substrings(t)
+	log := UsingHandler(h)
 
 	log.Msg(`\{+\}`)
-	want(`"msg":"{+}"`)
+	want(`"msg":"\\{+\\}"`)
 
 	log.Msg(":")
 	want(`"msg":":"`)
@@ -98,7 +81,7 @@ func TestEscaping(t *testing.T) {
 	want(`"msg":"foo"`)
 
 	log.Msg(`file\.txt`)
-	want(`"msg":"file.txt"`)
+	want(`"msg":"file\\.txt"`)
 
 	log.With("{}", "x").Msg(`{\{\}}`)
 	want(`"msg":"x"`)
@@ -119,7 +102,7 @@ func TestEscaping(t *testing.T) {
 	want(`"msg":"common-lisp"`)
 
 	log.Msg("About that struct\\{\\}...")
-	want(`"msg":"About that struct{}..."`)
+	want(`"msg":"About that struct\\{\\}..."`)
 
 	log.With(":color", "mauve").Msg("The color is {\\:color}.")
 	want(`"msg":"The color is mauve."`)
@@ -129,7 +112,7 @@ func TestEscaping(t *testing.T) {
 
 	// There is an extra slash introduced by JSON escaping vs Text escaping
 	log.Msg(`\{\\`)
-	want(`"msg":"{\\"`)
+	want(`"msg":"\\{\\\\"`)
 
 	// Needs JSON Handler; Text escapes the ZWNJ in 👩‍🦰
 	log.Err("👩‍🦰", errors.New("🛸"))
@@ -141,26 +124,21 @@ func TestFmt(t *testing.T) {
 		Writer(io.Discard).
 		Logger()
 
-	msg, err := log.Fmt("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
+	msg := log.Msgf("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
 	if msg != "0 <- 1 -> 2" {
 		t.Errorf("expected 0 <-1 -> 2, got %s", msg)
 	}
-	if err != nil {
-		t.Errorf("expected nil err: %s", err.Error())
-	}
 
 	reason := errors.New("reason")
-	msg, err = log.Fmt("more info", reason)
-	if msg != err.Error() {
-		t.Errorf("want equivalence: got msg %s, err %s", msg, err.Error())
-	}
+	err := log.Errf("more info", reason)
 	if ok := errors.Is(err, reason); !ok {
 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
 	}
 }
 
 func TestGroups(t *testing.T) {
-	log, want := substringTestLogger(t)
+	h, want := testlog.Substrings(t)
+	log := UsingHandler(h)
 
 	// one group
 	mulder := slog.Group("1", slog.String("first", "Fox"), slog.String("last", "Mulder"))
@@ -175,29 +153,33 @@ func TestGroups(t *testing.T) {
 
 	// raw
 	log.Msg("{} {first}", agents, "first", "1?")
-	want(`"msg":"{1:{first:Fox last:Mulder} 2:{first:Dana last:Scully}} 1?"`)
+	want(`"msg":"[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]] 1?"`)
 }
 
 func TestLabel(t *testing.T) {
-	log, want := substringTestLogger(t)
+	h, want := testlog.Substrings(t)
 
 	// one scope
-	mulder := log.Label("agent").With("first", "Fox", "last", "Mulder")
+	log := UsingHandler(h)
+	mulder := log.Group("agent").With("first", "Fox", "last", "Mulder")
 	mulder.Msg("Hi, {agent.last}")
 	want("Hi, Mulder")
 
 	// another scope
-	files := log.Label("files").With("x", true)
+	log = UsingHandler(h)
+	files := log.Group("files").With("x", true)
 	files.Msg("{files.x}")
 	want(`"msg":"true"`)
 
 	// two scopes, and a group
-	log = log.Label("files").Label("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = UsingHandler(h)
+	log = log.Group("files").Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 
 	// branching in scope
-	log = log.Label("files").With("x", true).Label("agent").With(slog.Group("name", slog.String("last", "Scully")))
+	log = UsingHandler(h)
+	log = log.Group("files").With("x", true).Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
 	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }
@@ -258,7 +240,7 @@ func TestLoggerKinds(t *testing.T) {
 		{struct{}{}, "", `"msg":"{}"`},
 
 		// group
-		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", `"msg":"{A:1 B:2}"`},
+		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", `"msg":"[A=1 B=2]"`},
 
 		// LogValuer
 		{spoof0{}, "", `"msg":"spoof"`},
@@ -267,7 +249,8 @@ func TestLoggerKinds(t *testing.T) {
 		{spoof2{}, "%10s", `"msg":"     spoof"`},
 	}
 
-	log, want := substringTestLogger(t)
+	h, want := testlog.Substrings(t)
+	log := UsingHandler(h)
 
 	for _, f := range fs {
 		msg := fmt.Sprintf("{:%s}", f.verb)
@@ -299,4 +282,79 @@ func TestSlogterpolate(t *testing.T) {
 	want("files=X")
 	want("logger_test.go")
 	b.Reset()
+}
+
+func TestReplaceTTY(t *testing.T) {
+	var b bytes.Buffer
+
+	want := func(want string) {
+		t.Helper()
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("\n\texpected %s\n\tin %s", want, b.String())
+		}
+		b.Reset()
+	}
+
+	log := New().
+		ReplaceFunc(func(a Attr) Attr {
+			if a.Key == "secret" {
+				a.Value = slog.StringValue("redacted")
+			}
+			return a
+		}).
+		Writer(&b).
+		Colors(false).
+		ForceTTY().
+		Logger()
+
+	log = log.With("secret", 1)
+
+	log.Msg("{secret}", "secret", 2)
+	want(`redacted  secret=redacted secret=redacted`)
+
+	log.Msg("{group.secret}, {group.group2.secret}", Group("group",
+		KV("secret", 3),
+		Group("group2",
+			KV("secret", 4),
+			KV("secret", 5),
+		),
+	))
+	want(`redacted, redacted  secret=redacted [group.secret=redacted[group2.secret=redacted group2.secret=redacted]]`)
+}
+
+func TestReplaceSlog(t *testing.T) {
+	var b bytes.Buffer
+
+	want := func(want string) {
+		t.Helper()
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("\n\texpected %s\n\tin %s", want, b.String())
+		}
+		b.Reset()
+	}
+
+	log := New().
+		ReplaceFunc(func(a Attr) Attr {
+			if a.Key == "secret" {
+				a.Value = slog.StringValue("redacted")
+			}
+			return a
+		}).
+		Writer(&b).
+		Colors(false).
+		JSON()
+
+	log = log.With("secret", 1)
+
+	log.Msg("{secret}", "secret", 2)
+	want(`"msg":"redacted","secret":"redacted","secret":"redacted"`)
+
+	log.Msg("{group.secret}, {group.group2.secret}", Group("group",
+		KV("secret", 3),
+		Group("group2",
+			KV("secret", 4),
+			KV("secret", 5),
+		),
+	))
+	want(`"msg":"redacted, redacted","secret":"redacted","group":{"secret":"redacted","group2":{"secret":"redacted","secret":"redacted"}}`)
 }

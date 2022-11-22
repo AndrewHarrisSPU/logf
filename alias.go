@@ -7,7 +7,10 @@ import (
 )
 
 type (
-	Attr  = slog.Attr
+	// See [slog.Attr].
+	Attr = slog.Attr
+
+	// See [slog.Value].
 	Value = slog.Value
 )
 

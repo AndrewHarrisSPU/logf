@@ -7,200 +7,311 @@ import (
 	"github.com/AndrewHarrisSPU/logf"
 )
 
-func Example() {
+// Interpolation can require escaping of '{', '}', and ':'
+func Example_interpolationEscapes() {
 	log := logf.New().
 		Colors(false).
+		ForceTTY().
 		Printer()
 
-	log.Msg("Hello, world!")
+	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
+	log.Msg(`:-}`)
 
-	log = log.With("name", "gophers")
-	log.Msg("Hello, {name}!")
+	// Also surreal: escaping into JSON
+	log.Msg(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
 
-	err := errors.New("no connection")
-	log.Err("Couldn't greet {name}", err)
+	// A single colon is parsed as a separator between an interpolation key and a formatting verb
+	log.Msg(`{:}`, "plaintext")
+
+	// Escaping a common lisp keyword symbol
+	log.Msg(`{\:keyword}`, ":keyword", "lisp")
+
+	// \Slashes, "quotes", and `backticks`
+	log.Msg("{\\\\}", `\`, `slash`)
+	log.Msg(`{\\}`, `\`, `slash`)
 
 	// Output:
-	// Hello, world!
-	// Hello, gophers!
-	// Couldn't greet gophers: no connection
+	// :-}
+	// {"color":"mauve"}
+	// plaintext
+	// lisp
+	// slash
+	// slash
 }
 
-func Example_formatting() {
+func Example_formattingVerbs() {
 	log := logf.New().
 		Colors(false).
+		ForceTTY().
 		Printer()
 
-	log.Msg("{:%010s}", "left-pad")
+	log.Msg("{left-pad:%010d}", "left-pad", 1)
 	log.Msg("pi is about {pi:%6.5f}", "pi", 355.0/113)
 
 	// Output:
-	// 00left-pad
+	// 0000000001
 	// pi is about 3.14159
 }
 
-func Example_interpolation() {
-	print := logf.New().
+func Example_interpolationArguments() {
+	log := logf.New().
 		Colors(false).
+		ForceTTY().
 		Printer()
 
-	// Unkeyed `{}` symbols draw one argument, like `print`:
-	print.Msg("The {} {} {} ...",
+	// Unkeyed `{}` symbols draw one argument each from a logging call:
+	log.Msg("The {} {} {} ...",
 		"quick",
 		"brown",
 		"fox",
 	)
 
-	// Keyed `{key}` symbols interpolate structure associate with a Logger.
-	print = print.With(
-		"speed", "quick",
-		"color", "brown",
-		"animal", "fox",
+	// Keyed `{key}` symbols interpolate on attribute keys
+	// These attributes may exist in logger structure, or they may be provided in a logging call.
+	log.With(
+		"color", "brindle",
+		"animal", "Boston Terrier",
 	)
-	print.Msg("The {speed} {color} {animal} ...")
-
-	// Extra arguments are used as attribute key value pairs.
-	log := logf.New().
-		Layout("message", "attrs").
-		Colors(false).
-		Logger()
-
-	// because only 3.14 is used for unkeyed interpolation,
-	// "greek" and "π" form an attribute
-	log.Msg("pi: {}", 3.14, "greek", "π")
+	log.Msg("The {speed} {color} {animal} ...", "speed", "rocketing")
 
 	// Output:
 	// The quick brown fox ...
-	// The quick brown fox ...
-	// pi: 3.14  greek=π
+	// The rocketing brindle Boston Terrier ...
 }
 
-func Example_leveled() {
+func Example_interpolationArgumentsMixed() {
 	log := logf.New().
-		Level(logf.DEBUG).
-		Layout("message", "attrs").
 		Colors(false).
+		Layout("message", "attrs").
+		ForceTTY().
 		Logger()
 
-	i := -1
-	log.Level(logf.INFO).Msg("", "count", i)
-
-	var errNegCount = errors.New("negative counter")
-	if i < 0 {
-		log.Level(logf.WARN).Err("oops", errNegCount, "count", i)
-	}
+	// Because only 3.14 is used for unkeyed interpolation,
+	// "greek" and "π" parse to an attribute
+	log.Msg("{greek}: {}", 3.14, "greek", "π")
 
 	// Output:
-	// count=-1
-	// oops: negative counter  count=-1
+	// π: 3.14  greek=π
 }
 
-type agent struct {
-	title string
-	name  string
-}
-
-func (a agent) LogValue() logf.Value {
-	return logf.Group("",
-		logf.KV("title", a.title),
-		logf.KV("name", a.name),
-	).Value
-}
-
-func Example_structured() {
-	/*
-	   type agent struct {
-	   	title string
-	   	name  string
-	   }
-
-	   func (a agent) LogValue() logf.Value {
-	   	return logf.Segment(
-	   		"title", a.title,
-	   		"name", a.name,
-	   	)
-	   }
-	*/
-
+// Building attributes is essential to capturing structure.
+// Mostly to avoid needing to import slog, but also to offer a few tweaked behaviors, logf repackages Attr constructors.
+func Example_structure() {
 	log := logf.New().
-		Layout("label", "message", "attrs").
 		Colors(false).
+		Layout("message", "attrs").
+		ForceTTY().
 		Logger()
 
-	log = log.With("files", "X")
+	// KV <=> slog.Any
+	files := logf.KV("files", "X")
 
-	log.Msg("")
+	// Attrs builds a slice of attrs, munging arguments
+	mulder := logf.Attrs(
+		files,
+		"title", "Special Agent",
+		"name", "Fox Mulder",
+	)
 
-	log = log.With(agent{
-		"Special Agent",
-		"Fox Mulder",
-	})
+	// Group <=> slog.Group
+	agent := logf.Group("agent", mulder...)
 
+	log = log.With(agent)
 	log.Msg("The Truth Is Out There")
 
+	// A Logger is a LogValuer, and the value is a slog.Group
+	print := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+	print.Msg("{}", log)
+
+	// the With method understands a LogValuer that resolves to a slog.Group
+	print.With(log)
+	print.Msg("{agent.name}")
+
 	// Output:
-	// files=X
-	// The Truth Is Out There  files=X title=Special Agent name=Fox Mulder
+	// The Truth Is Out There  agent=[files=X title=Special Agent name=Fox Mulder]
+	// [agent=[files=X title=Special Agent name=Fox Mulder]]
+	// Fox Mulder
+
+}
+
+// With a logf.Logger and interpolation, there are a variety of ways to handle an error
+func Example_structureErrors() {
+	log := logf.New().
+		Colors(false).
+		Layout("message", "attrs").
+		ForceTTY().
+		Logger()
+
+	log.Label("emails").With("user", "Strong Bad", "id", "12345")
+	err := errors.New("the system is down")
+
+	// i. logging the error
+	log.Err("", err)
+
+	// ii. wrapping the error, with no msg -> add label
+	err2 := log.Errf("", err)
+	fmt.Println(err2.Error())
+
+	// iii. wrapping the error, with interpolated context
+	err3 := log.Errf("{user}", err)
+	fmt.Println(err3.Error())
+
+	// iv. wrapping the error, with all available structure
+	//   - log's type is logf.Logger
+	//   - a logf.Logger is also a slog.LogValuer
+	//   - "{}" consumes log's LogValue
+	err4 := log.Errf("{}", err, log)
+	fmt.Println(err4.Error())
+
+	// Output:
+	// emails the system is down  user=Strong Bad id=12345
+	// emails: the system is down
+	// Strong Bad: the system is down
+	// [user=Strong Bad id=12345]: the system is down
 }
 
 func ExampleConfig_Layout() {
 	log := logf.New().
-		Layout("attrs", "label", "message").
 		Colors(false).
+		Layout("attrs", "message").
+		ForceTTY().
 		Logger()
-
-	log = log.Label("🙂")
 
 	log.Msg("Hello!", "left", "here")
 
 	// Output:
-	// 🙂.left=here  🙂  Hello!
+	// left=here  Hello!
 }
 
-func ExampleLogger_Fmt() {
+func ExampleLogger_Msgf() {
 	log := logf.New().
 		Colors(false).
+		ForceTTY().
 		Printer()
 
 	log = log.With("flavor", "coconut")
 
-	msg, err := log.Fmt("{flavor} pie", nil)
-	fmt.Println(msg)
-	fmt.Println(err)
+	msg := log.Msgf("{flavor} pie", nil)
+	fmt.Println("msg:", msg)
+
+	// Output:
+	// msg: coconut pie
+}
+
+func ExampleLogger_Errf() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	log = log.With("flavor", "coconut")
 
 	errInvalidPizza := errors.New("invalid pizza")
-	msg, err = log.Fmt("{flavor}", errInvalidPizza)
-	fmt.Println("message:", msg)
-	fmt.Println("error:", err)
+	err := log.Errf("{flavor}", errInvalidPizza)
+	fmt.Println("err:", err)
 
 	if errors.Is(err, errInvalidPizza) {
 		fmt.Println("(matched invalid pizza error)")
 	}
 
 	// Output:
-	// coconut pie
-	// <nil>
-	// message: coconut: invalid pizza
-	// error: coconut: invalid pizza
+	// err: coconut: invalid pizza
 	// (matched invalid pizza error)
 }
 
-func ExampleLogger_Label() {
+func ExampleLogger_Msg() {
 	log := logf.New().
-		Layout("label", "message", "attrs").
 		Colors(false).
-		Logger()
+		ForceTTY().
+		Printer()
 
-	log = log.Label("outer").With("x", 1)
-	log = log.Label("inner").With("x", 2)
-	log = log.Label("local")
+	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
 
-	log.Msg("{outer.x}", "x", 3)
-	log.Msg("{outer.inner.x}", "x", 3)
-	log.Msg("{outer.inner.local.x}", "x", 3)
+	log.Msg("Hello, world")
+	log.Msg("{}", "Hello, world")
+	log.Msg("With menace, {aliens} uttered \"{}\"", "Hello, world")
 
 	// Output:
-	// local  1  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
-	// local  2  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
-	// local  3  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
+	// Hello, world
+	// Hello, world
+	// With menace, Kang and Kodos, the Conquerors of Rigel VII uttered "Hello, world"
+}
+
+func ExampleLogger_Err() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	errNegative := errors.New("negative number")
+
+	log.Err("", errNegative)
+
+	log = log.With("component", "math")
+	log.Err("{component}: square root of {}", errNegative, -1)
+
+	// Output:
+	// negative number
+	// math: square root of -1: negative number
+}
+
+func ExampleLogger_Group() {
+	log := logf.New().
+		Colors(false).
+		Layout("message", "attrs").
+		ForceTTY().
+		Logger()
+
+	log.Group("outer").With("x", 1).
+		Group("inner").With("x", 2).
+		Group("local").
+		Label("xs")
+
+	log.Msg("outer {outer.x}", "x", 3)
+	log.Msg("inner {outer.inner.x}", "x", 3)
+	log.Msg("local {outer.inner.local.x}", "x", 3)
+
+	// Output:
+	// xs outer 1  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
+	// xs inner 2  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
+	// xs local 3  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
+}
+
+func ExampleLogger_Level() {
+	log := logf.New().
+		Colors(false).
+		Ref(logf.INFO). // the reference level (receiver type is *Config)
+		ForceTTY().
+		Printer().
+		Level(logf.INFO) // the logger level (receiver type is Logger)
+
+	// not visible, because logger level is less than reference level
+	log.Level(logf.DEBUG).Msg("i'm hiding")
+
+	// visible, because the receiver of the previous call was a new Logger created by log.Level
+	log.Msg("back to INFO level")
+
+	// not visible, because the Logger returned by log.Level is assigned to log
+	log = log.Level(logf.DEBUG)
+	log.Msg("now i'm invisible")
+
+	// Output:
+	// back to INFO level
+}
+
+func ExampleLogger_With() {
+	log := logf.New().
+		Colors(false).
+		Layout("message", "attrs").
+		ForceTTY().
+		Logger()
+
+	log.With("species", "gopher")
+	log.Msg("")
+
+	// Output:
+	// species=gopher
 }
