@@ -105,7 +105,6 @@ func (l Logger) Msg(msg string, args ...any) {
 	}
 
 	s := newSplicer()
-	args = s.scan(msg, args)
 
 	l.h.handle(s, l.level, msg, nil, l.depth, args)
 }

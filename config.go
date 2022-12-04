@@ -67,7 +67,7 @@ type Config struct {
 	replace   func(Attr) Attr
 
 	// tty gadgets
-	fmtr *ttyFormatter
+	fmtr ttyFormatter
 	useColors bool
 	forceTTY bool
 }
@@ -81,7 +81,7 @@ func New() *Config {
 		useColors:   true,
 		useStdMutex: true,
 
-		fmtr: &ttyFormatter{
+		fmtr: ttyFormatter{
 			// layout
 			layout: []ttyField{
 				ttyLevelField,
@@ -321,7 +321,7 @@ func (cfg *Config) TTY() *TTY {
 	}
 
 	// FORMATTER
-	fmtr := *cfg.fmtr
+	fmtr := cfg.fmtr
 
 	fmtr.sink = sink
 

@@ -301,14 +301,14 @@ func ExampleLogger_Group() {
 		Group("inner").With("x", 2).
 		Group("local")
 
-	log.Msg("outer {outer.x}", "x", 3)
-	log.Msg("inner {outer.inner.x}", "x", 3)
-	log.Msg("local {outer.inner.local.x}", "x", 3)
+	log.Msgf("outer {outer.x}", "x", 3)
+	log.Msgf("inner {outer.inner.x}", "x", 3)
+	log.Msgf("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
-	// outer {outer.x}   outer:{x:1 inner: {x:2 x:3}}}
-	// inner {outer.inner.x}   outer:{x:1 inner: {x:2 x:3}}}
-	// local {outer.inner.local.x}   outer:{x:1 inner: {x:2 x:3}}}
+	// outer 1  outer:{x:1 inner: {x:2 x:3}}}
+	// inner 2  outer:{x:1 inner: {x:2 x:3}}}
+	// local 3  outer:{x:1 inner: {x:2 x:3}}}
 }
 
 func ExampleLogger_Level() {
