@@ -3,6 +3,7 @@ package logf_test
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/AndrewHarrisSPU/logf"
 )
@@ -15,20 +16,20 @@ func Example_interpolationEscapes() {
 		Printer()
 
 	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
-	log.Msg(`:-}`)
+	log.Msgf(`:-}`)
 
 	// Also surreal: escaping into JSON
-	log.Msg(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
+	log.Msgf(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
 
 	// A single colon is parsed as a separator between an interpolation key and a formatting verb
-	log.Msg(`{:}`, "plaintext")
+	log.Msgf(`{:}`, "plaintext")
 
 	// Escaping a common lisp keyword symbol
-	log.Msg(`{\:keyword}`, ":keyword", "lisp")
+	log.Msgf(`{\:keyword}`, ":keyword", "lisp")
 
 	// \Slashes, "quotes", and `backticks`
-	log.Msg("{\\\\}", `\`, `slash`)
-	log.Msg(`{\\}`, `\`, `slash`)
+	log.Msgf("{\\\\}", `\`, `slash`)
+	log.Msgf(`{\\}`, `\`, `slash`)
 
 	// Output:
 	// :-}
@@ -45,8 +46,8 @@ func Example_formattingVerbs() {
 		ForceTTY().
 		Printer()
 
-	log.Msg("{left-pad:%010d}", "left-pad", 1)
-	log.Msg("pi is about {pi:%6.5f}", "pi", 355.0/113)
+	log.Msgf("{left-pad:%010d}", "left-pad", 1)
+	log.Msgf("pi is about {pi:%6.5f}", "pi", 355.0/113)
 
 	// Output:
 	// 0000000001
@@ -60,7 +61,7 @@ func Example_interpolationArguments() {
 		Printer()
 
 	// Unkeyed `{}` symbols draw one argument each from a logging call:
-	log.Msg("The {} {} {} ...",
+	log.Msgf("The {} {} {} ...",
 		"quick",
 		"brown",
 		"fox",
@@ -72,7 +73,7 @@ func Example_interpolationArguments() {
 		"color", "brindle",
 		"animal", "Boston Terrier",
 	)
-	log.Msg("The {speed} {color} {animal} ...", "speed", "rocketing")
+	log.Msgf("The {speed} {color} {animal} ...", "speed", "rocketing")
 
 	// Output:
 	// The quick brown fox ...
@@ -88,10 +89,46 @@ func Example_interpolationArgumentsMixed() {
 
 	// Because only 3.14 is used for unkeyed interpolation,
 	// "greek" and "π" parse to an attribute
-	log.Msg("{greek}: {}", 3.14, "greek", "π")
+	log.Msgf("{greek}: {}", 3.14, "greek", "π")
 
 	// Output:
-	// π: 3.14  greek=π
+	// π: 3.14  greek:π
+}
+
+// Interpolation of time values in message strings.
+// This is distinct from how [Config.TimeFormat], which affects [TTY] time fields.
+func Example_inerpolationTimeVerbs() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	log.Msgf("time interpolation formatting:")
+	log.Msgf("no verb {}", time.Time{})
+	log.Msgf("RFC3339 {:RFC3339}", time.Time{})
+	log.Msgf("kitchen {:kitchen}", time.Time{})
+	log.Msgf("timestamp {:stamp}", time.Time{})
+	log.Msgf("epoch {:epoch}", time.Time{})
+
+	// custom formatting uses strings like time.Layout, using a semicolon rather than ':'
+	log.Msgf("custom {:15;03;04}", time.Time{})
+
+	log.Msgf("duration interpolation formatting:")
+	d := time.Unix(1000, 0).Sub(time.Unix(1, 0))
+	log.Msgf("no verb {}", d)
+	log.Msgf("epoch {:epoch}", d)
+
+	// Output:
+	// time interpolation formatting:
+	// no verb 1754-08-30T22:43:41.128Z
+	// RFC3339 1754-08-30T22:43:41Z
+	// kitchen 10:43PM
+	// timestamp Aug 30 22:43:41
+	// epoch -6795364579
+	// custom 22:10:43
+	// duration interpolation formatting:
+	// no verb 16m39s
+	// epoch 999000000000
 }
 
 // Building attributes is essential to capturing structure.
@@ -114,27 +151,21 @@ func Example_structure() {
 	)
 
 	// Group <=> slog.Group
-	agent := logf.Group("agent", mulder...)
+	agent := logf.Group("agent", mulder)
 
 	log = log.With(agent)
-	log.Msg("The Truth Is Out There")
+	log.Msgf("The Truth Is Out There")
 
 	// A Logger is a LogValuer, and the value is a slog.Group
 	print := logf.New().
 		Colors(false).
 		ForceTTY().
 		Printer()
-	print.Msg("{}", log)
-
-	// the With method understands a LogValuer that resolves to a slog.Group
-	print.With(log)
-	print.Msg("{agent.name}")
+	print.Msgf("{}", log)
 
 	// Output:
-	// The Truth Is Out There  agent=[files=X title=Special Agent name=Fox Mulder]
+	// The Truth Is Out There  agent:{files:X title:Special Agent name:Fox Mulder}
 	// [agent=[files=X title=Special Agent name=Fox Mulder]]
-	// Fox Mulder
-
 }
 
 // With a logf.Logger and interpolation, there are a variety of ways to handle an error
@@ -145,32 +176,32 @@ func Example_structureErrors() {
 		ForceTTY().
 		Logger()
 
-	log.Label("emails").With("user", "Strong Bad", "id", "12345")
+	log.Group("emails").With("user", "Strong Bad", "id", "12345")
 	err := errors.New("the system is down")
 
 	// i. logging the error
 	log.Err("", err)
 
 	// ii. wrapping the error, with no msg -> add label
-	err2 := log.Errf("", err)
+	err2 := log.NewErr("", err)
 	fmt.Println(err2.Error())
 
 	// iii. wrapping the error, with interpolated context
-	err3 := log.Errf("{user}", err)
+	err3 := log.NewErr("{emails.user}", err)
 	fmt.Println(err3.Error())
 
 	// iv. wrapping the error, with all available structure
 	//   - log's type is logf.Logger
 	//   - a logf.Logger is also a slog.LogValuer
 	//   - "{}" consumes log's LogValue
-	err4 := log.Errf("{}", err, log)
+	err4 := log.NewErr("{}", err, log)
 	fmt.Println(err4.Error())
 
 	// Output:
-	// emails the system is down  user=Strong Bad id=12345
-	// emails: the system is down
+	// the system is down   emails:{user:Strong Bad id:12345}
+	// the system is down
 	// Strong Bad: the system is down
-	// [user=Strong Bad id=12345]: the system is down
+	// [emails.user=Strong Bad emails.id=12345]: the system is down
 }
 
 func ExampleConfig_Layout() {
@@ -183,10 +214,10 @@ func ExampleConfig_Layout() {
 	log.Msg("Hello!", "left", "here")
 
 	// Output:
-	// left=here  Hello!
+	// left:here Hello!
 }
 
-func ExampleLogger_Msgf() {
+func ExampleLogger_Fmt() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -194,7 +225,7 @@ func ExampleLogger_Msgf() {
 
 	log = log.With("flavor", "coconut")
 
-	msg := log.Msgf("{flavor} pie", nil)
+	msg := log.Fmt("{flavor} pie", nil)
 	fmt.Println("msg:", msg)
 
 	// Output:
@@ -210,7 +241,7 @@ func ExampleLogger_Errf() {
 	log = log.With("flavor", "coconut")
 
 	errInvalidPizza := errors.New("invalid pizza")
-	err := log.Errf("{flavor}", errInvalidPizza)
+	err := log.NewErr("{flavor}", errInvalidPizza)
 	fmt.Println("err:", err)
 
 	if errors.Is(err, errInvalidPizza) {
@@ -222,7 +253,7 @@ func ExampleLogger_Errf() {
 	// (matched invalid pizza error)
 }
 
-func ExampleLogger_Msg() {
+func ExampleLogger_Msgf() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -231,8 +262,8 @@ func ExampleLogger_Msg() {
 	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
 
 	log.Msg("Hello, world")
-	log.Msg("{}", "Hello, world")
-	log.Msg("With menace, {aliens} uttered \"{}\"", "Hello, world")
+	log.Msgf("{}", "Hello, world")
+	log.Msgf("With menace, {aliens} uttered \"{}\"", "Hello, world")
 
 	// Output:
 	// Hello, world
@@ -251,7 +282,8 @@ func ExampleLogger_Err() {
 	log.Err("", errNegative)
 
 	log = log.With("component", "math")
-	log.Err("{component}: square root of {}", errNegative, -1)
+	err := log.NewErr("{component}: square root of {}", errNegative, -1)
+	log.Err( "", err)
 
 	// Output:
 	// negative number
@@ -267,17 +299,16 @@ func ExampleLogger_Group() {
 
 	log.Group("outer").With("x", 1).
 		Group("inner").With("x", 2).
-		Group("local").
-		Label("xs")
+		Group("local")
 
 	log.Msg("outer {outer.x}", "x", 3)
 	log.Msg("inner {outer.inner.x}", "x", 3)
 	log.Msg("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
-	// xs outer 1  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
-	// xs inner 2  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
-	// xs local 3  outer.x=1 outer.inner.x=2 outer.inner.local.x=3
+	// outer {outer.x}   outer:{x:1 inner: {x:2 x:3}}}
+	// inner {outer.inner.x}   outer:{x:1 inner: {x:2 x:3}}}
+	// local {outer.inner.local.x}   outer:{x:1 inner: {x:2 x:3}}}
 }
 
 func ExampleLogger_Level() {
@@ -313,5 +344,5 @@ func ExampleLogger_With() {
 	log.Msg("")
 
 	// Output:
-	// species=gopher
+	// species:gopher
 }

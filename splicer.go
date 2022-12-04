@@ -60,6 +60,7 @@ type splicer struct {
 	interpolates bool
 }
 
+
 func newSplicer() *splicer {
 	return spool.Get().(*splicer)
 }
@@ -162,6 +163,7 @@ func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr
 			args = args[1:]
 		case []Attr:
 			s.export = append(s.export, arg...)
+			args = args[1:]
 		case slog.LogValuer:
 			v := arg.LogValue().Resolve()
 			if v.Kind() == slog.GroupKind {
@@ -180,6 +182,12 @@ func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr
 	for _, a := range s.export {
 		s.match(scope, a, replace)
 	}
+}
+
+// used for joining Record attrs
+func (s *splicer) joinOne(scope string, a Attr, replace func(Attr) Attr) {
+	s.export = append(s.export, a)
+	s.match(scope, a, replace)
 }
 
 // root of matching invocation
@@ -256,16 +264,18 @@ func (s *splicer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (s *splicer) writeByte(c byte) {
+func (s *splicer) WriteByte(c byte) error {
 	s.text = append(s.text, c)
+	return nil
 }
 
 func (s *splicer) writeRune(r rune) {
 	s.text = utf8.AppendRune(s.text, r)
 }
 
-func (s *splicer) writeString(m string) {
+func (s *splicer) WriteString(m string) (int, error){
 	s.text = append(s.text, m...)
+	return len(m), nil
 }
 
 // TYPED WRITES
@@ -273,17 +283,17 @@ func (s *splicer) writeString(m string) {
 func (s *splicer) writeArg(arg any, verb []byte) {
 	switch arg := arg.(type) {
 	case Attr:
-		s.writeValue(arg.Value, verb)
+		s.WriteValue(arg.Value, verb)
 	case []Attr:
 		s.writeGroup(arg)
 	case slog.LogValuer:
-		s.writeValue(arg.LogValue(), verb)
+		s.WriteValue(arg.LogValue(), verb)
 	default:
-		s.writeValue(slog.AnyValue(arg), verb)
+		s.WriteValue(slog.AnyValue(arg), verb)
 	}
 }
 
-func (s *splicer) writeValue(v slog.Value, verb []byte) {
+func (s *splicer) WriteValue(v slog.Value, verb []byte) {
 	if len(verb) > 0 {
 		s.writeValueVerb(v, string(verb))
 	} else {
@@ -294,7 +304,7 @@ func (s *splicer) writeValue(v slog.Value, verb []byte) {
 func (s *splicer) writeValueNoVerb(v slog.Value) {
 	switch v.Kind() {
 	case slog.StringKind:
-		s.writeString(v.String())
+		s.WriteString(v.String())
 	case slog.BoolKind:
 		s.text = strconv.AppendBool(s.text, v.Bool())
 	case slog.Float64Kind:
@@ -372,19 +382,19 @@ func (s *splicer) writeDurationVerb(d time.Duration, verb string) {
 
 func (s *splicer) writeError(err error) {
 	if len(s.text) > 0 {
-		s.writeString(": ")
+		s.WriteString(": ")
 	}
-	s.writeString(err.Error())
+	s.WriteString(err.Error())
 }
 
 func (s *splicer) writeGroup(as []Attr) {
 	next := byte('[')
 	for _, a := range as {
-		s.writeByte(next)
-		s.writeString(a.Key)
-		s.writeByte('=')
+		s.WriteByte(next)
+		s.WriteString(a.Key)
+		s.WriteByte('=')
 		s.writeValueNoVerb(a.Value)
 		next = ' '
 	}
-	s.writeByte(']')
+	s.WriteByte(']')
 }

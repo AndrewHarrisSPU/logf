@@ -43,27 +43,27 @@ func TestMalformed(t *testing.T) {
 	h, want := testlog.Substrings(t)
 	log := UsingHandler(h)
 
-	log.Msg("{}")
+	log.Msgf("{}")
 	want(missingArg)
 
-	log.Msg("{item}")
+	log.Msgf("{item}")
 	want(missingAttr)
 
 	// only a single string in args - not enough for an Attr
-	log.Msg("no interpolation", "not-a-key")
+	log.Msgf("no interpolation", "not-a-key")
 	want(missingArg)
 
 	// no key string
-	log.Msg("no interpolation", 0)
+	log.Msgf("no interpolation", 0)
 	want(missingKey)
 
 	// both xs appear, first wins for interpolation
-	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
+	log.Msgf("{}", slog.Int("x", 1), slog.Int("x", 2))
 	want(`"msg":"1","x":1,"x":2`)
 
 	// both bools appear (no deduplication)
 	// also: second bool wins for interpolation
-	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
+	log.With("bit", true).Msgf("{bit}", slog.Bool("bit", false))
 	want(`"msg":"false","bit":true,"bit":false`)
 }
 
@@ -71,47 +71,47 @@ func TestEscaping(t *testing.T) {
 	h, want := testlog.Substrings(t)
 	log := UsingHandler(h)
 
-	log.Msg(`\{+\}`)
+	log.Msgf(`\{+\}`)
 	want(`"msg":"\\{+\\}"`)
 
-	log.Msg(":")
+	log.Msgf(":")
 	want(`"msg":":"`)
 
-	log.Msg("{:}", "foo")
+	log.Msgf("{:}", "foo")
 	want(`"msg":"foo"`)
 
-	log.Msg(`file\.txt`)
+	log.Msgf(`file\.txt`)
 	want(`"msg":"file\\.txt"`)
 
-	log.With("{}", "x").Msg(`{\{\}}`)
+	log.With("{}", "x").Msgf(`{\{\}}`)
 	want(`"msg":"x"`)
 
-	log.With("alpha", "x").Msg("{alpha:%3s}")
+	log.With("alpha", "x").Msgf("{alpha:%3s}")
 	want(`"msg":"  x"`)
 
-	log.With("{}", "x").Msg(`{\{\}:%3s}`)
+	log.With("{}", "x").Msgf(`{\{\}:%3s}`)
 	want(`"msg":"  x"`)
 
-	log.Msg("{:%3s}", "x")
+	log.Msgf("{:%3s}", "x")
 	want(`"msg":"  x"`)
 
-	log.Msg(`{\:%3s}`, slog.String(`:%3s`, "esc"))
+	log.Msgf(`{\:%3s}`, slog.String(`:%3s`, "esc"))
 	want(`"msg":"esc"`)
 
-	log.With(`:attr`, "common-lisp").Msg(`{\:attr}`)
+	log.With(`:attr`, "common-lisp").Msgf(`{\:attr}`)
 	want(`"msg":"common-lisp"`)
 
-	log.Msg("About that struct\\{\\}...")
+	log.Msgf("About that struct\\{\\}...")
 	want(`"msg":"About that struct\\{\\}..."`)
 
-	log.With(":color", "mauve").Msg("The color is {\\:color}.")
+	log.With(":color", "mauve").Msgf("The color is {\\:color}.")
 	want(`"msg":"The color is mauve."`)
 
-	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
+	log.With("x:y ratio", 2).Msgf(`What a funny ratio: {x\:y ratio}!`)
 	want(`"msg":"What a funny ratio: 2!"`)
 
 	// There is an extra slash introduced by JSON escaping vs Text escaping
-	log.Msg(`\{\\`)
+	log.Msgf(`\{\\`)
 	want(`"msg":"\\{\\\\"`)
 
 	// Needs JSON Handler; Text escapes the ZWNJ in 👩‍🦰
@@ -124,13 +124,13 @@ func TestFmt(t *testing.T) {
 		Writer(io.Discard).
 		Logger()
 
-	msg := log.Msgf("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
+	msg := log.Fmt("{left} <- {root} -> {right}", nil, "left", 0, "right", 2, "root", 1)
 	if msg != "0 <- 1 -> 2" {
 		t.Errorf("expected 0 <-1 -> 2, got %s", msg)
 	}
 
 	reason := errors.New("reason")
-	err := log.Errf("more info", reason)
+	err := log.NewErr("more info", reason)
 	if ok := errors.Is(err, reason); !ok {
 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
 	}
@@ -142,45 +142,45 @@ func TestGroups(t *testing.T) {
 
 	// one group
 	mulder := slog.Group("1", slog.String("first", "Fox"), slog.String("last", "Mulder"))
-	log.Msg("Hi, {1.first} {1.last}", mulder)
+	log.Msgf("Hi, {1.first} {1.last}", mulder)
 	want("Hi, Fox Mulder")
 
 	// two (nested) groups
 	scully := slog.Group("2", slog.String("first", "Dana"), slog.String("last", "Scully"))
 	agents := slog.Group("agents", mulder, scully)
-	log.Msg("Hi, {agents.1.last} and {agents.2.last}", agents)
+	log.Msgf("Hi, {agents.1.last} and {agents.2.last}", agents)
 	want("Hi, Mulder and Scully")
 
 	// raw
-	log.Msg("{} {first}", agents, "first", "1?")
+	log.Msgf("{} {first}", agents, "first", "1?")
 	want(`"msg":"[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]] 1?"`)
 }
 
-func TestLabel(t *testing.T) {
+func TestGroups2(t *testing.T) {
 	h, want := testlog.Substrings(t)
 
 	// one scope
 	log := UsingHandler(h)
 	mulder := log.Group("agent").With("first", "Fox", "last", "Mulder")
-	mulder.Msg("Hi, {agent.last}")
+	mulder.Msgf("Hi, {agent.last}")
 	want("Hi, Mulder")
 
 	// another scope
 	log = UsingHandler(h)
 	files := log.Group("files").With("x", true)
-	files.Msg("{files.x}")
+	files.Msgf("{files.x}")
 	want(`"msg":"true"`)
 
 	// two scopes, and a group
 	log = UsingHandler(h)
 	log = log.Group("files").Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
-	log.Msg("Hi, {files.agent.name.last}")
+	log.Msgf("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 
 	// branching in scope
 	log = UsingHandler(h)
 	log = log.Group("files").With("x", true).Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
-	log.Msg("Hi, {files.agent.name.last}")
+	log.Msgf("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }
 
@@ -254,7 +254,7 @@ func TestLoggerKinds(t *testing.T) {
 
 	for _, f := range fs {
 		msg := fmt.Sprintf("{:%s}", f.verb)
-		log.Msg(msg, f.arg)
+		log.Msgf(msg, f.arg)
 		want(f.want)
 	}
 }
@@ -263,6 +263,8 @@ func TestSlogterpolate(t *testing.T) {
 	var b bytes.Buffer
 	h := New().
 		Colors(false).
+		Level(LevelText).
+		Layout("level", "message", "attrs", "source").
 		Writer(&b).
 		AddSource(true).
 		TTY()
@@ -279,7 +281,7 @@ func TestSlogterpolate(t *testing.T) {
 	log.Info("Hi, {Agent}", "files", "X")
 	want("INFO")
 	want("Hi, Mulder")
-	want("files=X")
+	want("files:X")
 	want("logger_test.go")
 	b.Reset()
 }
@@ -302,6 +304,7 @@ func TestReplaceTTY(t *testing.T) {
 			}
 			return a
 		}).
+		Layout("message", "attrs").
 		Writer(&b).
 		Colors(false).
 		ForceTTY().
@@ -309,17 +312,17 @@ func TestReplaceTTY(t *testing.T) {
 
 	log = log.With("secret", 1)
 
-	log.Msg("{secret}", "secret", 2)
-	want(`redacted  secret=redacted secret=redacted`)
+	log.Msgf("{secret}", "secret", 2)
+	want(`redacted secret:redacted secret:redacted`)
 
-	log.Msg("{group.secret}, {group.group2.secret}", Group("group",
+	log.Msgf("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
-		Group("group2",
+		Group("group2", Attrs(
 			KV("secret", 4),
 			KV("secret", 5),
-		),
-	))
-	want(`redacted, redacted  secret=redacted [group.secret=redacted[group2.secret=redacted group2.secret=redacted]]`)
+		)),
+	)))
+	want(`redacted, redacted   secret:redacted group:{secret:redacted group2:{secret:redacted secret:redacted}}`)
 }
 
 func TestReplaceSlog(t *testing.T) {
@@ -347,14 +350,14 @@ func TestReplaceSlog(t *testing.T) {
 	log = log.With("secret", 1)
 
 	log.Msg("{secret}", "secret", 2)
-	want(`"msg":"redacted","secret":"redacted","secret":"redacted"`)
+	want(`"msg":"{secret}","secret":"redacted","secret":"redacted"`)
 
-	log.Msg("{group.secret}, {group.group2.secret}", Group("group",
+	log.Msg("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
-		Group("group2",
+		Group("group2", Attrs(
 			KV("secret", 4),
 			KV("secret", 5),
-		),
-	))
-	want(`"msg":"redacted, redacted","secret":"redacted","group":{"secret":"redacted","group2":{"secret":"redacted","secret":"redacted"}}`)
+		)),
+	)))
+	want(`"msg":"{group.secret}, {group.group2.secret}","secret":"redacted","group":{"secret":"redacted","group2":{"secret":"redacted","secret":"redacted"}}`)
 }

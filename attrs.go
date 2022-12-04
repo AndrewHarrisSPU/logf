@@ -12,7 +12,7 @@ func KV(key string, value any) Attr {
 
 // Group constructs a composite Attr from a name and a list of Attrs.
 // See [slog.Group].
-func Group(name string, as ...Attr) Attr {
+func Group(name string, as []Attr) Attr {
 	return slog.Group(name, as...)
 }
 
@@ -56,6 +56,10 @@ func Attrs(args ...any) (as []Attr) {
 }
 
 func scopeAttrs(scope string, as []Attr, replace func(Attr) Attr) []Attr {
+	if scope == "" {
+		return as
+	}
+
 	scoped := make([]Attr, 0)
 	for _, a := range as {
 		if replace != nil {

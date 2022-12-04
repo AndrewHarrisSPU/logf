@@ -15,6 +15,7 @@ func (s *splicer) scan(msg string, args []any) []any {
 	var clip string
 	var found bool
 	var nUnkeyed int
+	s.interpolates = false
 
 	for {
 		msg, clip, found = scanNext(msg)
@@ -172,7 +173,7 @@ func (s *splicer) ipolUntilRune(msg string, sep rune) (tail string, n int) {
 			esc = false
 			// special case: preserve the `\` from escaping a colon
 			if r == ':' {
-				s.writeString(`\:`)
+				s.WriteString(`\:`)
 				continue
 			}
 			fallthrough
@@ -221,7 +222,7 @@ func (s *splicer) ipolUnkeyed(verb []byte) {
 		arg = s.list[0]
 		s.list = s.list[1:]
 	} else {
-		s.writeString(missingArg)
+		s.WriteString(missingArg)
 		return
 	}
 
@@ -233,11 +234,11 @@ func (s *splicer) ipolKeyed(key, verb []byte) {
 
 	// should be unreachable, but I kept reaching it
 	if !ok {
-		s.writeString(missingAttr)
+		s.WriteString(missingAttr)
 		return
 	}
 
-	s.writeValue(v, verb)
+	s.WriteValue(v, verb)
 }
 
 func ipolClip(clip []byte) (key, verb []byte) {

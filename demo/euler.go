@@ -15,7 +15,10 @@ type gopher struct {
 
 func newGopher(log *logf.Logger, i int) gopher {
 	return gopher{
-		log: log.Level(logf.DEBUG).Label("gopher").With("id", i),
+		log: log.
+			Level(logf.DEBUG).
+			Tag("gopher").
+			With("id", i),
 		id:  i,
 		sum: 0,
 	}
@@ -25,9 +28,9 @@ func (g gopher) add(ns <-chan int, sums chan<- int) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			g.log.Msg("got a number", "sum", g.sum)
+			g.log.Msg("{id}: {sum}", "sum", g.sum)
 		}
-		g.log.Msg("done")
+		g.log.Msg("{id} done")
 		sums <- g.sum
 	}()
 }
@@ -41,12 +44,14 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	tty := logf.New().
-		Elapsed(true).
 		Ref(logf.DEBUG).
-		Stream(logf.INFO, logf.INFO+1).
+		Layout( "level", "tags", "message", "attrs").
+		Level(logf.LevelBar).
 		TTY()
 
-	log := tty.Logger().Label("main")
+	log := tty.
+		Logger().
+		Tag("main")
 
 	ns, sums := make(chan int), make(chan int)
 
@@ -55,13 +60,12 @@ func main() {
 	}
 
 	for i := 1; i < rangeN; i++ {
-		<-time.NewTimer(time.Millisecond * 30).C
-		if i%9 == 0 {
-			log.Level(logf.INFO).Msg("mod fizz squared: {}", i)
+		<-time.NewTimer(time.Millisecond * 10).C
+		if i%3 == 0 {
+			log.Level(logf.INFO).Msg("FIZZ", "fizz", i)
 		}
-		if i%25 == 0 {
-			msg := log.Msgf("mod buzz squared: {}", i)
-			tty.WriteString(msg)
+		if i%5 == 0 {
+			log.Level(logf.INFO+1).Msg("BUZZ", "buzz", i)
 		}
 		ns <- i
 	}
@@ -72,6 +76,5 @@ func main() {
 		total += <-sums
 	}
 
-	log.Level(logf.INFO+1).Msg("{}", total)
-	tty.Close()
+	tty.WriteString( log.Msgf("{}", total))
 }

@@ -2,12 +2,15 @@ package logf
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"golang.org/x/exp/slog"
 )
 
 const labelKey = "label"
-var noLabel = Attr{}
+
+var blankLabel = slog.String(labelKey, "")
 
 type Logger struct {
 	h     handler
@@ -74,15 +77,13 @@ func (l *Logger) Group(name string) *Logger {
 	return l
 }
 
-// Label sets the label text of the [Logger].
-// Label text is helpful for identifying loggers in a [TTY].
-// A label is not an attribute and does not affect logged output in any other way.
-func (l *Logger) Label(label string) *Logger {
+func (l *Logger) Tag(tag string) *Logger {
 	*l = Logger{
-		h:     l.h.withLabel(label),
+		h:     l.h.withTag(tag),
 		level: l.level,
 		depth: l.depth,
 	}
+
 	return l
 }
 
@@ -103,7 +104,21 @@ func (l Logger) Msg(msg string, args ...any) {
 		return
 	}
 
-	l.h.handle(l.level.Level(), msg, nil, l.depth, args)
+	s := newSplicer()
+	args = s.scan(msg, args)
+
+	l.h.handle(s, l.level, msg, nil, l.depth, args)
+}
+
+func (l Logger) Msgf(msg string, args ...any){
+	if !l.h.Enabled(l.level) {
+		return
+	}
+
+	s := newSplicer()
+	args = s.scan(msg, args)
+
+	l.h.handle(s, l.level, msg, nil, l.depth, args)
 }
 
 // Err logs a message, appending the error string to the message text.
@@ -112,19 +127,33 @@ func (l Logger) Err(msg string, err error, args ...any) {
 		return
 	}
 
-	l.h.handle(l.level.Level(), msg, err, l.depth, args)
+	s := newSplicer()
+
+	l.h.handle(s, l.level, msg, err, l.depth, args)
 }
 
 // Msgf applies interpolation and formatting.
 // The resulting string is returned, rather than logged.
-func (l Logger) Msgf(msg string, args ...any) string {
-	s, _ := l.h.fmt(msg, nil, args)
-	return s
+func (l Logger) Fmt(msg string, args ...any) string {
+	s := l.h.fmt(msg, args)
+	defer s.free()
+
+	return s.line()
 }
 
 // Errf applies interpolation and formatting to wrap an error.
 // The resulting error is returned, rather than logged.
-func (l Logger) Errf(msg string, err error, args ...any) error {
-	_, e := l.h.fmt(msg, err, args)
-	return e
+func (l Logger) NewErr(msg string, err error, args ...any) error {
+	s := l.h.fmt(msg, args)
+	defer s.free()
+
+	if err == nil {
+		return errors.New(s.line())
+	}
+
+	if len(s.text) > 0 {
+		s.WriteString(": ")
+	}
+	s.WriteString("%w")
+	return fmt.Errorf(s.line(), err)
 }

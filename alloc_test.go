@@ -147,7 +147,7 @@ func allocLoggerArgFunc(log Logger, arg any, verb string) func() {
 	}
 
 	return func() {
-		log.Msg(msg, arg)
+		log.Msgf(msg, arg)
 	}
 }
 
@@ -157,7 +157,7 @@ func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 	log.With(key, arg)
 
 	return func() {
-		log.Msg(msg, arg)
+		log.Msgf(msg, arg)
 	}
 }
 
@@ -167,7 +167,7 @@ func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 	log.With(key, arg)
 
 	return func() {
-		_ = log.Msgf(msg, nil)
+		_ = log.Fmt(msg, nil)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestAllocLoggerGroups(t *testing.T) {
 	log.With(g)
 
 	fn := func() {
-		log.Msg("")
+		log.Msgf("")
 	}
 
 	t.Run("group", func(t *testing.T) {

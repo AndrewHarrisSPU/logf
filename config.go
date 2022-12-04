@@ -9,9 +9,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var stdRef slog.LevelVar
-var stdSink ttySink
-var stdMutex *sync.Mutex
+var StdRef slog.LevelVar
+var stdMutex sync.Mutex
 
 func writerIsTerminal(w io.Writer) bool {
 	file, isFile := w.(*os.File)
@@ -21,20 +20,6 @@ func writerIsTerminal(w io.Writer) bool {
 
 	stat, _ := file.Stat()
 	return (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
-}
-
-func init() {
-	ref := new(slog.LevelVar)
-	mu := new(sync.Mutex)
-	stdMutex = new(sync.Mutex)
-
-	stdSink = ttySink{
-		w:       os.Stdout,
-		refBase: ref,
-		mu:      mu,
-	}
-
-	stdSink.ref.Set(stdSink.refBase.Level())
 }
 
 // CONFIG
@@ -62,9 +47,6 @@ func init() {
 //   - [Config.TimeLayout]: "15:04:05"
 //   - [Confg.Elapsed]: false
 //   - [Config.AddLabel]: true
-//   - [Config.Stream]: (disabled) hold: nil, log: nil
-//   - [Config.StreamSizes]: sample: 5 lines, hold: 1 line
-//   - [Config.StreamRefresh]: 16 milliseconds
 //
 // 3. A Config method returning a [Logger] or a [TTY] closes the chained invocation:
 //   - [Config.TTY] returns a [TTY]
@@ -76,45 +58,82 @@ func init() {
 //
 // TODO: document mutex edge cases
 type Config struct {
-	w          io.Writer
-	ref        slog.Leveler
-	layout     []ttyField
-	replace    func(Attr) Attr
-	timeFormat string
-
-	logLevel  slog.Level
-	holdLevel slog.Level
-	holdCap   int
-	sampleCap int
-	streaming bool
-	refresh   int
-
-	forceTTY    bool
-	elapsed     bool
-	colors      bool
-	addSource   bool
-	addLabel    bool
+	// sink config
+	w           io.Writer
 	useStdMutex bool
+
+	// slog.Handler config
+	ref       slog.Leveler
+	replace   func(Attr) Attr
+
+	// tty gadgets
+	fmtr *ttyFormatter
+	useColors bool
+	forceTTY bool
 }
 
 // New opens a Config with default values.
 func New() *Config {
 	cfg := &Config{
-		w:   os.Stdout,
-		ref: &stdSink.ref,
-		layout: []ttyField{
-			ttyTimeField,
-			ttyLevelField,
-			ttyMessageField,
-			ttyAttrsField,
-		},
-		timeFormat:  "15:04:05",
-		colors:      true,
-		addLabel:    true,
-		sampleCap:   5,
-		holdCap:     1,
-		refresh:     16,
+		w:           os.Stdout,
+		ref:         &StdRef,
+		replace:     nil,
+		useColors:   true,
 		useStdMutex: true,
+
+		fmtr: &ttyFormatter{
+			// layout
+			layout: []ttyField{
+				ttyLevelField,
+				ttyTimeField,
+				ttyMessageField,
+				ttyNewlineField,
+				ttyAttrsField,
+			},
+
+			// field encodings
+			time: ttyEncoder[time.Time]{
+				"\x1b[2m",
+				EncodeFunc(encTimeShort),
+			},
+			level: ttyEncoder[slog.Level]{
+				"",
+				EncodeFunc(encLevelBar),
+			},
+			message: ttyEncoder[string]{
+				"",
+				nil,
+			},
+			key: ttyEncoder[string]{
+				"\x1b[36;2m",
+				EncodeFunc(encKey),
+			},
+			value: ttyEncoder[Value]{
+				"\x1b[36m",
+				EncodeFunc(encValue),
+			},
+			source: ttyEncoder[SourceLine]{
+				"\x1b[2m",
+				EncodeFunc(encSourceAbs),
+			},
+			groupOpen: EncodeFunc(encGroupOpen),
+			groupClose: EncodeFunc(encGroupClose),
+
+			// level colors
+			groupPen: "\x1b[2m",
+			debugPen: "\x1b[36;1m",
+			infoPen:  "\x1b[32;1m",
+			warnPen:  "\x1b[33;1m",
+			errorPen: "\x1b[31;1m",
+
+			// tags
+			tag: map[string]ttyEncoder[Attr]{
+				"#": ttyEncoder[Attr]{
+					"\x1b[35;1m",
+					EncodeFunc(encTag),
+				},
+			},
+		},
 	}
 
 	return cfg
@@ -133,106 +152,97 @@ func (cfg *Config) Writer(w io.Writer) *Config {
 	return cfg
 }
 
-// TimeFormat sets a [time.Layout] layout.
-// When set, the time field of a log line encodes with the provided layout.
-func (cfg *Config) TimeFormat(layout string) *Config {
-	cfg.timeFormat = layout
-	return cfg
-}
-
-// Elapsed configures reporting elapsed time rather than wall clock time in log lines.
-// The start time is the creation time of a [TTY], or the time set by [TTY.StartTimeNow].
-func (cfg *Config) Elapsed(toggle bool) *Config {
-	cfg.elapsed = toggle
-	return cfg
-}
-
 // Colors toggles [TTY] color encoding, using ANSI escape codes.
 //
 // TODO: support cygwin escape codes.
 func (cfg *Config) Colors(toggle bool) *Config {
-	cfg.colors = toggle
+	cfg.useColors = toggle
 	return cfg
 }
 
-// AddLabel configures a [TTY] to emit messages that include a label.
-// The label is the most recent name set by [Logger.Label] (or [slog.Handler.WithGroup]).
-func (cfg *Config) AddLabel(toggle bool) *Config {
-	cfg.addLabel = toggle
+func (cfg *Config) Time(color string, style Encoder[time.Time]) *Config {
+	if style == nil {
+		style = EncodeFunc(encTimeShort)
+	}
+	cfg.fmtr.time = ttyEncoder[time.Time]{newPen(color), style}
+	return cfg
+}
+
+func (cfg *Config) Level(style Encoder[slog.Level]) *Config {
+	if style == nil {
+		style = EncodeFunc(encLevelBar)
+	}
+	cfg.fmtr.level = ttyEncoder[slog.Level]{newPen(""), style}
+	return cfg
+}
+
+func (cfg *Config) LevelColors(debug string, info string, warn string, error string) *Config {
+	cfg.fmtr.debugPen = newPen(debug)
+	cfg.fmtr.infoPen = newPen(info)
+	cfg.fmtr.warnPen = newPen(warn)
+	cfg.fmtr.errorPen = newPen(error)
+	return cfg
+}
+
+func (cfg *Config) Message(color string) *Config {
+	cfg.fmtr.message = ttyEncoder[string]{newPen(color), nil}
+	return cfg
+}
+
+func (cfg *Config) AttrKey(color string, style Encoder[string]) *Config {
+	if style == nil {
+		style = EncodeFunc(encKey)
+	}
+	cfg.fmtr.key = ttyEncoder[string]{newPen(color), style}
+	return cfg
+}
+
+func (cfg *Config) AttrValue(color string, style Encoder[Value]) *Config {
+	if style == nil {
+		style = EncodeFunc(encValue)
+	}
+	cfg.fmtr.value = ttyEncoder[Value]{newPen(color), style}
+	return cfg
+}
+
+func (cfg *Config) Group(color string, open Encoder[any], close Encoder[int]) *Config {
+	cfg.fmtr.groupPen = newPen(color)
+	if open == nil {
+		open = EncodeFunc(encGroupOpen)
+	}
+	if close == nil {
+		close = EncodeFunc(encGroupClose)
+	}
+	cfg.fmtr.groupOpen = open
+	cfg.fmtr.groupClose = close
+	return cfg
+}
+
+func (cfg *Config) Source(color string, style Encoder[SourceLine]) *Config {
+	if style == nil {
+		style = EncodeFunc(encSourceAbs)
+	}
+	cfg.fmtr.source = ttyEncoder[SourceLine]{newPen(color), style}
+	return cfg
+}
+
+// Styles includes a map of [Attr] keys to custom [TTY] styling
+// Unless overwritten, the "err" key is preset to display red
+func (cfg *Config) Tag(key string, color string) *Config {
+	tag := ttyEncoder[Attr]{newPen(color), EncodeFunc[Attr](encTag)}
+	cfg.fmtr.tag[key] = tag
+	return cfg
+}
+
+func (cfg *Config) TagStyle(key string, color string, style Encoder[Attr]) *Config {
+	tag := ttyEncoder[Attr]{newPen(color), style}
+	cfg.fmtr.tag[key] = tag
 	return cfg
 }
 
 // AddSource configures the inclusion of source file and line information in log lines.
 func (cfg *Config) AddSource(toggle bool) *Config {
-	cfg.addSource = toggle
-	return cfg
-}
-
-func (cfg *Config) sourceOK() {
-	var srcFieldOk bool
-	for _, field := range cfg.layout {
-		if field == ttySourceField {
-			srcFieldOk = true
-			break
-		}
-	}
-
-	if !srcFieldOk {
-		cfg.layout = append(cfg.layout, ttySourceField)
-	}
-}
-
-// Stream configures a [TTY] for streaming display.
-// When streaming, log lines may enter a hold buffer or a sample buffer.
-// These are displayed at the tail of [TTY] output, and display the n most recent log lines they capture.
-func (cfg *Config) streamOK() {
-	// bail if no stream capacity
-	if cfg.sampleCap == 0 && cfg.holdCap == 0 {
-		cfg.streaming = false
-		return
-	}
-
-	return
-}
-
-// [TTY] streaming logic is parameterized by the hold and log levels.
-//   - A log line is only created when it exceeds the reference level.
-//   - If the resulting log line is below the hold level, it enters the sample buffer.
-//   - If the resulting log line is below the log level, it enters the hold buffer.
-//   - Otherwise, the log line is written more permanently to terminal output.
-func (cfg *Config) Stream(hold, log slog.Level) *Config {
-	cfg.streaming = true
-	if hold > log {
-		hold = log
-	}
-	cfg.holdLevel = hold
-	cfg.logLevel = log
-
-	return cfg
-}
-
-// StreamSizes configures the number of lines a [TTY]'s' sample and hold buffers.
-func (cfg *Config) StreamSizes(sample, hold int) *Config {
-	if sample < 1 {
-		sample = 0
-	}
-
-	if hold < 1 {
-		hold = 0
-	}
-
-	cfg.sampleCap = sample
-	cfg.holdCap = hold
-
-	return cfg
-}
-
-// StreamRefresh configures the number of milliseconds between on-screen updates to buffers.
-// A [TTY] may modulate the reference level it enables logging at between refresh ticks.
-// By dropping messages that would otherwise enter the sample buffer, the [TTY] may better uncouple from a high volume of logging.
-// Messages that would enter the hold buffer or be logged directly are not dropped in this scheme.
-func (cfg *Config) StreamRefresh(ms int) *Config {
-	cfg.refresh = ms
+	cfg.fmtr.addSource = toggle
 	return cfg
 }
 
@@ -241,15 +251,24 @@ func (cfg *Config) StreamRefresh(ms int) *Config {
 // Layout recognizes the following strings (and ignores others):
 //   - "time" (see also: [Config.Elapsed] and [Config.TimeFormat])
 //   - "level"
-//   - "message" (see also: [Config.AddLabel])
+//   - "message"
 //   - "attrs"
+//   - "tags"
+//   - "source"
+//   - "\n" (includes a newline)
+//   - " " (includes some number of spaces)
 //
 // If [Config.AddSource] is configured, source information is the last field encoded in a log line.
 func (cfg *Config) Layout(fields ...string) *Config {
-	cfg.layout = cfg.layout[:0]
+	cfg.fmtr.layout = cfg.fmtr.layout[:0]
+
 	var f ttyField
-	for _, text := range fields {
-		switch text {
+	for _, s := range fields {
+		switch s {
+		case " ":
+			f = ttySpaceField
+		case "\n":
+			f = ttyNewlineField
 		case "time":
 			f = ttyTimeField
 		case "level":
@@ -258,13 +277,16 @@ func (cfg *Config) Layout(fields ...string) *Config {
 			f = ttyMessageField
 		case "attrs":
 			f = ttyAttrsField
+		case "tags":
+			f = ttyTagsField
+		case "source":
+			f = ttySourceField
 		default:
 			continue
 		}
 
-		cfg.layout = append(cfg.layout, f)
+		cfg.fmtr.layout = append(cfg.fmtr.layout, f)
 	}
-
 	return cfg
 }
 
@@ -278,67 +300,60 @@ func (cfg *Config) ReplaceFunc(replace func(a Attr) Attr) *Config {
 // TTY returns a new TTY.
 // If the configured Writer is the same as [StdTTY] (default: [os.Stdout]), the new TTY shares a mutex with [StdTTY].
 func (cfg *Config) TTY() *TTY {
-	// finalize source and stream details
-	cfg.sourceOK()
-	cfg.streamOK()
-
-	d := time.Duration(cfg.refresh) * time.Millisecond
-
 	// SINK
 	sink := &ttySink{
 		w:       cfg.w,
-		refresh: time.NewTicker(d),
-		done:    make(chan struct{}),
+		ref:     cfg.ref,
 		start:   time.Now(),
 		replace: cfg.replace,
 	}
 
-	// TODO: is this quite right?
 	if cfg.useStdMutex {
-		sink.mu = stdMutex
+		sink.mu = &stdMutex
 	} else {
 		sink.mu = new(sync.Mutex)
 	}
 
-	sink.ref.Set(cfg.ref.Level())
-	sink.refBase = cfg.ref
 	if cfg.forceTTY {
 		sink.enabled = true
 	} else {
 		sink.enabled = writerIsTerminal(sink.w)
 	}
 
-	if cfg.streaming {
-		sink.stream = ttyStream{
-			enabled:   true,
-			logLevel:  cfg.logLevel,
-			holdLevel: cfg.holdLevel,
-			hold: spinner{
-				cap: cfg.holdCap,
-			},
-			sample: spinner{
-				cap: cfg.sampleCap,
-			},
-		}
+	// FORMATTER
+	fmtr := *cfg.fmtr
+
+	fmtr.sink = sink
+
+	fmtr.layout = make([]ttyField, len(cfg.fmtr.layout))
+	for i, f := range cfg.fmtr.layout {
+		fmtr.layout[i] = f
 	}
 
-	// ENCODE
-	enc := &ttyEncoder{
-		sink:       sink,
-		fields:     cfg.layout,
-		timeFormat: cfg.timeFormat,
-		colors:     cfg.colors,
-		elapsed:    cfg.elapsed,
-		addSource:  cfg.addSource,
+	fmtr.tag = make(map[string]ttyEncoder[Attr], len(cfg.fmtr.tag))
+	for k, v := range cfg.fmtr.tag {
+		fmtr.tag[k] = v
 	}
 
-	if sink.stream.enabled {
-		go sink.update()
+	if !cfg.useColors {
+		fmtr.time.color = ""
+		fmtr.level.color = ""
+		fmtr.message.color = ""
+		fmtr.key.color = ""
+		fmtr.value.color = ""
+		fmtr.source.color = ""
+
+		fmtr.groupPen = ""
+		fmtr.debugPen = ""
+		fmtr.infoPen = ""
+		fmtr.warnPen = ""
+		fmtr.errorPen = ""
 	}
 
 	// TTY
 	return &TTY{
-		enc: enc,
+		tag:  slog.String("", ""),
+		fmtr: &fmtr,
 	}
 }
 
@@ -365,31 +380,21 @@ func (cfg *Config) Printer() *Logger {
 		Logger()
 }
 
-// Streamer returns a [TTY]-based Logger configured for streaming.
-// The [Logger] samples below INFO, and prints above WARN.
-// If the configured Writer is a terminal, the returned [*Logger] is [TTY]-based
-// Otherwise, the returned [*Logger] a JSONHandler]-based
-func (cfg *Config) Streamer() *Logger {
-	return cfg.
-		Stream(INFO, WARN).
-		TTY().
-		Logger()
-}
-
 // JSON returns a Logger using a [slog.JSONHandler] for encoding.
 //
 // Only [Config.Writer], [Config.Level], [Config.AddSource], and [Config.ReplaceAttr] configuration is applied.
 func (cfg *Config) JSON() *Logger {
 	enc := slog.HandlerOptions{
 		Level:       cfg.ref,
-		AddSource:   cfg.addSource,
+		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
 	}.NewJSONHandler(cfg.w)
 
 	return &Logger{
 		h: &Handler{
+			tag:       slog.String("", ""),
 			enc:       enc,
-			addSource: cfg.addSource,
+			addSource: cfg.fmtr.addSource,
 			replace:   cfg.replace,
 		},
 	}
@@ -401,14 +406,15 @@ func (cfg *Config) JSON() *Logger {
 func (cfg *Config) Text() *Logger {
 	enc := slog.HandlerOptions{
 		Level:       cfg.ref,
-		AddSource:   cfg.addSource,
+		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
 	}.NewTextHandler(cfg.w)
 
 	return &Logger{
 		h: &Handler{
+			tag:       slog.String("", ""),
 			enc:       enc,
-			addSource: cfg.addSource,
+			addSource: cfg.fmtr.addSource,
 			replace:   cfg.replace,
 		},
 	}

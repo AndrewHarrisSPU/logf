@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/AndrewHarrisSPU/logf"
@@ -14,46 +15,55 @@ func main() {
 
 	tty := logf.New().
 		AddSource(true).
-		Elapsed(true).
 		Ref(logf.DEBUG).
-		Stream(logf.INFO, logf.WARN).
-		StreamSizes(1, 1).
-		StreamRefresh(20).
+		Layout("level", "tags", "time", "message", "source").
+		Time("dim", logf.TimeShort).
+		Tag("place", "dim cyan").
+		// 	logf.Tag( "place", "bright blue" ),
+		// 	logf.Styler("i", "magenta", "bright magenta"),
+		// ).
 		TTY()
 
-	slog.SetDefault(slog.New(tty.WithAttrs(logf.Attrs("place", "world"))))
+	slog.SetDefault(slog.New(tty.WithAttrs(logf.Attrs(
+		"place", "world",
+	))))
+
 	ctx := slog.NewContext(context.Background(), slog.Default())
+	d := 5_000 * time.Millisecond
+	ctx, _ = context.WithTimeout(ctx, d)
 
 	// random log traffic
-	go ping(logf.DEBUG, 100)
-	go ping(logf.INFO, 1_000)
-	go ping(logf.WARN, 4_000)
-	go halfway(tty, 5_000)
-	go deadline(ctx, 10_000)
+	wg := new(sync.WaitGroup)
+	wg.Add(3)
 
-	<-time.NewTimer(10 * time.Second).C
-	tty.Close()
+	go ping(ctx, wg, logf.DEBUG, 100)
+	go ping(ctx, wg, logf.INFO, 1_000)
+	go ping(ctx, wg, logf.WARN, 500)
+	deadline(ctx)
+
+	wg.Wait()
 }
 
-func deadline(ctx context.Context, interval int) {
+func deadline(ctx context.Context) {
 	log := slog.FromContext(ctx)
-	d := time.Duration(rand.Intn(interval))
-	ctx, _ = context.WithTimeout(ctx, d*time.Millisecond)
 	<-ctx.Done()
 	log.Error("", ctx.Err())
 }
 
-func halfway(tty *logf.TTY, interval int) {
-	<-time.NewTimer(time.Duration(interval) * time.Millisecond).C
-	tty.WriteString("halfway!")
-}
-
-func ping(level slog.Level, interval int) {
+func ping(ctx context.Context, wg *sync.WaitGroup, level slog.Level, interval int) {
+	log := slog.FromContext(ctx)
+	d := time.Duration(interval)
+	tick := time.NewTicker(d *time.Millisecond).C
 	i := 0
 	for {
-		d := time.Duration(rand.Intn(interval))
-		<-time.NewTimer(d * time.Millisecond).C
-		slog.Log(level, "Hello, {place}", "i", i)
-		i++
+		select {
+		case <-tick:
+			log.Log(level, "Hello, {place}", "i", i)
+			i++
+		case <-ctx.Done():
+			log.Log(1, "goodbye {level} ticks", "i", i, "level", level)
+			wg.Done()
+			return
+		}
 	}
 }

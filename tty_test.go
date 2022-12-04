@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-const testTTYoutput = `   INFO    test ok
-   INFO    test ok
-   INFO    test ok  l1.a1=1
-   WARN    test ok  l2.a2=2
-   DEBUG   test ok
-   INFO    test ok  l1.a1=1
-   WARN    test ok  l2.a2=2
-   ERROR   test ok  l3.a3=3
+const testTTYoutput = `   INFO     ok
+   INFO     ok
+   INFO     ok l1:{a1:1}
+   WARN     ok l2:{a2:2}
+   DEBUG    ok
+   INFO     ok l1:{a1:1}
+   WARN     ok l2:{a2:2}
+   ERROR    ok l3:{a3:3}
 `
 
 func TestTTY(t *testing.T) {
@@ -24,9 +24,9 @@ func TestTTY(t *testing.T) {
 			Ref(DEBUG).
 			Layout("level", "label", "message", "attrs").
 			Colors(false).
+			Level(LevelText).
 			ForceTTY().
-			Logger().
-			Label("test")
+			Logger()
 	}
 
 	log().Msg("ok")
