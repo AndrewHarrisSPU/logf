@@ -28,7 +28,7 @@ func spacing() {
 	log := logf.New().
 		AddSource(true).
 		Time("dim", logf.TimeShort).
-		Layout( "level", "time", "message", "\t", "attrs", "source").
+		Layout("level", "time", "message", "\t", "attrs", "source").
 		Source("dim", logf.SourceShort).
 		Logger().
 		Tag("spacing")
@@ -46,12 +46,12 @@ func spacing() {
 }
 
 func level() {
-log := logf.New().
+	log := logf.New().
 		Ref(logf.DEBUG-4).
 		LevelColors("dim", "bright green", "bright yellow", "bright red").
 		Logger().
 		With("key", "value").
-		With("key2", "value2")	
+		With("key2", "value2")
 
 	log.Level(logf.DEBUG - 4).Msg("_")
 	log.Level(logf.DEBUG).Msg("_")
@@ -83,7 +83,7 @@ func levelText() {
 }
 
 func levelMono() {
-log := logf.New().
+	log := logf.New().
 		Ref(logf.DEBUG-4).
 		Colors(false).
 		Logger().
@@ -97,7 +97,7 @@ log := logf.New().
 	log.Level(logf.INFO + 1).Msg("_")
 	log.Level(logf.WARN).Msg("_")
 	log.Level(logf.ERROR).Msg("_")
-	log.Level(logf.ERROR + 4).Msg("_")	
+	log.Level(logf.ERROR + 4).Msg("_")
 }
 
 func proofs(log *logf.Logger) {
@@ -120,13 +120,13 @@ func styles() {
 		Logger()
 
 	log.Group("http")
-	
+
 	log = log.With("method", "GET", "uuid", 1)
 	log = log.Tag("styles")
 
 	log.Msg("a request")
 
-	baggage := logf.Group( "otel", logf.Attrs(
+	baggage := logf.Group("otel", logf.Attrs(
 		logf.Group("span", logf.Attrs(
 			"trace_id", "0x5b8aa5a2d2c872e8321cf37308d69df2",
 			"span_id", "0x5fb397be34d26b51",
@@ -140,7 +140,7 @@ func styles() {
 func reality() {
 	h := logf.New().
 		AddSource(true).
-		Layout("level", "time", "message", "\n", "attrs", "\n", "source" ).
+		Layout("level", "time", "message", "\n", "attrs", "\n", "source").
 		Logger().
 		Handler()
 
@@ -160,6 +160,6 @@ var TestAttrs = logf.Attrs(
 	"time", time.Date(2022, time.May, 1, 0, 0, 0, 0, time.UTC),
 	"string", "7e3b3b2aaeff56a7108fe11e154200dd/7819479873059528190",
 	"int", 32768,
-	"duration", 23 * time.Second,
+	"duration", 23*time.Second,
 	"err", errors.New("fail"),
 )

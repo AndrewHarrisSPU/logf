@@ -69,7 +69,7 @@ func Example_interpolationArguments() {
 
 	// Keyed `{key}` symbols interpolate on attribute keys
 	// These attributes may exist in logger structure, or they may be provided in a logging call.
-	log.With(
+	log = log.With(
 		"color", "brindle",
 		"animal", "Boston Terrier",
 	)
@@ -176,7 +176,7 @@ func Example_structureErrors() {
 		ForceTTY().
 		Logger()
 
-	log.Group("emails").With("user", "Strong Bad", "id", "12345")
+	log = log.Group("emails").With("user", "Strong Bad", "id", "12345")
 	err := errors.New("the system is down")
 
 	// i. logging the error
@@ -297,7 +297,7 @@ func ExampleLogger_Group() {
 		ForceTTY().
 		Logger()
 
-	log.Group("outer").With("x", 1).
+	log = log.Group("outer").With("x", 1).
 		Group("inner").With("x", 2).
 		Group("local")
 
@@ -340,7 +340,7 @@ func ExampleLogger_With() {
 		ForceTTY().
 		Logger()
 
-	log.With("species", "gopher")
+	log = log.With("species", "gopher")
 	log.Msg("")
 
 	// Output:

@@ -75,5 +75,5 @@ func main() {
 		total += <-sums
 	}
 
-	tty.WriteString( log.Fmt("{}", total))
+	tty.WriteString(log.Fmt("{}", total))
 }

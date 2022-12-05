@@ -6,7 +6,7 @@ import (
 	"github.com/AndrewHarrisSPU/logf"
 )
 
-func arrow(b *logf.Buffer, level logf.Level){
+func arrow(b *logf.Buffer, level logf.Level) {
 	b.WriteString("⇶⇶⇶▶")
 }
 

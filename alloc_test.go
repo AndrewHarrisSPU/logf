@@ -177,7 +177,7 @@ func TestAllocLoggerGroups(t *testing.T) {
 		Text()
 
 	g := slog.Group("1", slog.String("roman", "i"))
-	log.With(g)
+	log = log.With(g)
 
 	fn := func() {
 		log.Msgf("")

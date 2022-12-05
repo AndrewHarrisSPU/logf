@@ -273,7 +273,7 @@ func (tty *TTY) encExportTags(b *Buffer) {
 	if tty.tag.Key == "#" {
 		b.writeSep()
 		tty.fmtr.tag["#"].Encode(b, tty.tag)
-		b.sep = ' '		
+		b.sep = ' '
 	}
 
 	if len(tty.tagText) > 0 {

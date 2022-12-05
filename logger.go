@@ -59,32 +59,28 @@ func (l Logger) Depth(depth int) *Logger {
 // With appends attributes held in a [Logger]'s handler.
 // Arguments are converted to attributes with [Attrs].
 func (l *Logger) With(args ...any) *Logger {
-	*l = Logger{
+	return &Logger{
 		h:     l.h.WithAttrs(Attrs(args...)).(handler),
 		level: l.level,
 		depth: l.depth,
 	}
-	return l
 }
 
 // Group calls [slog.Logger.WithGroup] on a [Logger]'s handler.
 func (l *Logger) Group(name string) *Logger {
-	*l = Logger{
+	return &Logger{
 		h:     l.h.WithGroup(name).(handler),
 		level: l.level,
 		depth: l.depth,
 	}
-	return l
 }
 
 func (l *Logger) Tag(tag string) *Logger {
-	*l = Logger{
+	return &Logger{
 		h:     l.h.withTag(tag),
 		level: l.level,
 		depth: l.depth,
 	}
-
-	return l
 }
 
 // Handler returns a handler associated with the Logger.
