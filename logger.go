@@ -109,7 +109,7 @@ func (l Logger) Msg(msg string, args ...any) {
 	l.h.handle(s, l.level, msg, nil, l.depth, args)
 }
 
-func (l Logger) Msgf(msg string, args ...any){
+func (l Logger) Msgf(msg string, args ...any) {
 	if !l.h.Enabled(l.level) {
 		return
 	}

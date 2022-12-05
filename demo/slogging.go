@@ -16,9 +16,9 @@ func main() {
 	tty := logf.New().
 		AddSource(true).
 		Ref(logf.DEBUG).
-		Layout("level", "tags", "time", "message", "source").
+		Layout("level", "time", "tags", "message", "source").
 		Time("dim", logf.TimeShort).
-		Tag("place", "dim cyan").
+		Tag("place", "cyan").
 		// 	logf.Tag( "place", "bright blue" ),
 		// 	logf.Styler("i", "magenta", "bright magenta"),
 		// ).

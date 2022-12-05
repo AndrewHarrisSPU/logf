@@ -60,7 +60,6 @@ type splicer struct {
 	interpolates bool
 }
 
-
 func newSplicer() *splicer {
 	return spool.Get().(*splicer)
 }
@@ -273,7 +272,7 @@ func (s *splicer) writeRune(r rune) {
 	s.text = utf8.AppendRune(s.text, r)
 }
 
-func (s *splicer) WriteString(m string) (int, error){
+func (s *splicer) WriteString(m string) (int, error) {
 	s.text = append(s.text, m...)
 	return len(m), nil
 }

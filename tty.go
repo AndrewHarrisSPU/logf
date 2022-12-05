@@ -42,17 +42,17 @@ type TTY struct {
 
 // ttyEncoder manages state relevant to encoding a record to bytes
 type ttyFormatter struct {
-	sink *ttySink
+	sink   *ttySink
 	layout []ttyField
-	tag map[string]ttyEncoder[Attr]
+	tag    map[string]ttyEncoder[Attr]
 
-	time    ttyEncoder[time.Time]
-	level   ttyEncoder[slog.Level]
-	message ttyEncoder[string]
-	key     ttyEncoder[string]
-	value   ttyEncoder[Value]
-	source  ttyEncoder[SourceLine]
-	groupOpen Encoder[any]
+	time       ttyEncoder[time.Time]
+	level      ttyEncoder[slog.Level]
+	message    ttyEncoder[string]
+	key        ttyEncoder[string]
+	value      ttyEncoder[Value]
+	source     ttyEncoder[SourceLine]
+	groupOpen  Encoder[struct{}]
 	groupClose Encoder[int]
 
 	groupPen pen
@@ -78,9 +78,9 @@ type ttySink struct {
 
 func (tty *TTY) bounceJSON() *Logger {
 	cfg := &Config{
-		w:         tty.fmtr.sink.w,
-		ref:       tty.fmtr.sink.ref,
-		replace:   tty.fmtr.sink.replace,
+		w:       tty.fmtr.sink.w,
+		ref:     tty.fmtr.sink.ref,
+		replace: tty.fmtr.sink.replace,
 	}
 
 	cfg.AddSource(tty.fmtr.addSource)
@@ -177,7 +177,7 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 		t2.encAttrGroupOpen(b, t2.openKey)
 		t2.openKey = ""
 	}
-	t2.encList(b, "", as, listAttrs)
+	t2.encListAttrs(b, "", as)
 
 	t2.attrSep = b.sep
 	t2.attrText = tty.attrText + s.line()
@@ -185,7 +185,7 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 	// append tag text
 	s.text = s.text[:0]
 	b.sep = t2.tagSep
-	t2.encList(b, "", as, listTags)
+	t2.encListTags(b, "", as)
 	t2.tagSep = b.sep
 	t2.tagText = tty.tagText + s.line()
 

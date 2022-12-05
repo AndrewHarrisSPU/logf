@@ -304,7 +304,7 @@ func TestReplaceTTY(t *testing.T) {
 			}
 			return a
 		}).
-		Layout("message", "attrs").
+		Layout("message", "\t", "attrs").
 		Writer(&b).
 		Colors(false).
 		ForceTTY().
@@ -313,7 +313,7 @@ func TestReplaceTTY(t *testing.T) {
 	log = log.With("secret", 1)
 
 	log.Msgf("{secret}", "secret", 2)
-	want(`redacted secret:redacted secret:redacted`)
+	want(`redacted   secret:redacted secret:redacted`)
 
 	log.Msgf("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),

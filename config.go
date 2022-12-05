@@ -63,13 +63,13 @@ type Config struct {
 	useStdMutex bool
 
 	// slog.Handler config
-	ref       slog.Leveler
-	replace   func(Attr) Attr
+	ref     slog.Leveler
+	replace func(Attr) Attr
 
 	// tty gadgets
-	fmtr ttyFormatter
+	fmtr      ttyFormatter
 	useColors bool
-	forceTTY bool
+	forceTTY  bool
 }
 
 // New opens a Config with default values.
@@ -86,8 +86,9 @@ func New() *Config {
 			layout: []ttyField{
 				ttyLevelField,
 				ttyTimeField,
+				ttyTagsField,
 				ttyMessageField,
-				ttyNewlineField,
+				ttyTabField,
 				ttyAttrsField,
 			},
 
@@ -116,12 +117,12 @@ func New() *Config {
 				"\x1b[2m",
 				EncodeFunc(encSourceAbs),
 			},
-			groupOpen: EncodeFunc(encGroupOpen),
+			groupOpen:  EncodeFunc(encGroupOpen),
 			groupClose: EncodeFunc(encGroupClose),
 
 			// level colors
 			groupPen: "\x1b[2m",
-			debugPen: "\x1b[36;1m",
+			debugPen: "\x1b[2m",
 			infoPen:  "\x1b[32;1m",
 			warnPen:  "\x1b[33;1m",
 			errorPen: "\x1b[31;1m",
@@ -205,7 +206,7 @@ func (cfg *Config) AttrValue(color string, style Encoder[Value]) *Config {
 	return cfg
 }
 
-func (cfg *Config) Group(color string, open Encoder[any], close Encoder[int]) *Config {
+func (cfg *Config) Group(color string, open Encoder[struct{}], close Encoder[int]) *Config {
 	cfg.fmtr.groupPen = newPen(color)
 	if open == nil {
 		open = EncodeFunc(encGroupOpen)
@@ -269,6 +270,8 @@ func (cfg *Config) Layout(fields ...string) *Config {
 			f = ttySpaceField
 		case "\n":
 			f = ttyNewlineField
+		case "\t":
+			f = ttyTabField
 		case "time":
 			f = ttyTimeField
 		case "level":

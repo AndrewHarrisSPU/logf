@@ -83,7 +83,7 @@ func Example_interpolationArguments() {
 func Example_interpolationArgumentsMixed() {
 	log := logf.New().
 		Colors(false).
-		Layout("message", "attrs").
+		Layout("message", "\t", "attrs").
 		ForceTTY().
 		Logger()
 
@@ -92,7 +92,7 @@ func Example_interpolationArgumentsMixed() {
 	log.Msgf("{greek}: {}", 3.14, "greek", "π")
 
 	// Output:
-	// π: 3.14  greek:π
+	// π: 3.14   greek:π
 }
 
 // Interpolation of time values in message strings.
@@ -136,7 +136,7 @@ func Example_inerpolationTimeVerbs() {
 func Example_structure() {
 	log := logf.New().
 		Colors(false).
-		Layout("message", "attrs").
+		Layout("message", "\t", "attrs").
 		ForceTTY().
 		Logger()
 
@@ -164,7 +164,7 @@ func Example_structure() {
 	print.Msgf("{}", log)
 
 	// Output:
-	// The Truth Is Out There  agent:{files:X title:Special Agent name:Fox Mulder}
+	// The Truth Is Out There   agent:{files:X title:Special Agent name:Fox Mulder}
 	// [agent=[files=X title=Special Agent name=Fox Mulder]]
 }
 
@@ -172,7 +172,7 @@ func Example_structure() {
 func Example_structureErrors() {
 	log := logf.New().
 		Colors(false).
-		Layout("message", "attrs").
+		Layout("message", "\t", "attrs").
 		ForceTTY().
 		Logger()
 
@@ -283,7 +283,7 @@ func ExampleLogger_Err() {
 
 	log = log.With("component", "math")
 	err := log.NewErr("{component}: square root of {}", errNegative, -1)
-	log.Err( "", err)
+	log.Err("", err)
 
 	// Output:
 	// negative number
@@ -293,7 +293,7 @@ func ExampleLogger_Err() {
 func ExampleLogger_Group() {
 	log := logf.New().
 		Colors(false).
-		Layout("message", "attrs").
+		Layout("message", "\t", "attrs").
 		ForceTTY().
 		Logger()
 
@@ -306,9 +306,9 @@ func ExampleLogger_Group() {
 	log.Msgf("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
-	// outer 1  outer:{x:1 inner: {x:2 x:3}}}
-	// inner 2  outer:{x:1 inner: {x:2 x:3}}}
-	// local 3  outer:{x:1 inner: {x:2 x:3}}}
+	// outer 1   outer:{x:1 inner: {x:2 x:3}}}
+	// inner 2   outer:{x:1 inner: {x:2 x:3}}}
+	// local 3   outer:{x:1 inner: {x:2 x:3}}}
 }
 
 func ExampleLogger_Level() {

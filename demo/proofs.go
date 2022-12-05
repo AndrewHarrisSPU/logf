@@ -10,8 +10,10 @@ import (
 
 func main() {
 	logger()
-	levels()
-	tabwrite()
+	level()
+	levelText()
+	levelMono()
+	spacing()
 	reality()
 	styles()
 }
@@ -19,16 +21,17 @@ func main() {
 func logger() {
 	log := logf.New().Logger()
 
-	log.Msg("message")
+	log.Msg("message", "key", "value")
 }
 
-func tabwrite() {
+func spacing() {
 	log := logf.New().
 		AddSource(true).
 		Time("dim", logf.TimeShort).
-		Layout( "level", "time", "message", "attrs", "source").
+		Layout( "level", "time", "message", "\t", "attrs", "source").
 		Source("dim", logf.SourceShort).
-		Logger()
+		Logger().
+		Tag("spacing")
 
 	log.Msg("_", "len", 1)
 	log.Msg("__", "len", 2)
@@ -42,11 +45,29 @@ func tabwrite() {
 	log.Msg("__________", "len", 10)
 }
 
-func levels() {
+func level() {
+log := logf.New().
+		Ref(logf.DEBUG-4).
+		LevelColors("dim", "bright green", "bright yellow", "bright red").
+		Logger().
+		With("key", "value").
+		With("key2", "value2")	
+
+	log.Level(logf.DEBUG - 4).Msg("_")
+	log.Level(logf.DEBUG).Msg("_")
+	log.Level(logf.INFO - 1).Msg("_")
+	log.Level(logf.INFO).Msg("_")
+	log.Level(logf.INFO + 1).Msg("_")
+	log.Level(logf.WARN).Msg("_")
+	log.Level(logf.ERROR).Msg("_")
+	log.Level(logf.ERROR + 4).Msg("_")
+}
+
+func levelText() {
 	log := logf.New().
 		Ref(logf.DEBUG-4).
-		Layout("level", "message", "attrs").
 		Level(logf.LevelText).
+		Layout("time", "level", "tags", "message", "attrs").
 		Logger().
 		With("key", "value").
 		With("key2", "value2")
@@ -61,6 +82,24 @@ func levels() {
 	log.Level(logf.ERROR + 4).Msg("_")
 }
 
+func levelMono() {
+log := logf.New().
+		Ref(logf.DEBUG-4).
+		Colors(false).
+		Logger().
+		With("key", "value").
+		With("key2", "value2")
+
+	log.Level(logf.DEBUG - 4).Msg("_")
+	log.Level(logf.DEBUG).Msg("_")
+	log.Level(logf.INFO - 1).Msg("_")
+	log.Level(logf.INFO).Msg("_")
+	log.Level(logf.INFO + 1).Msg("_")
+	log.Level(logf.WARN).Msg("_")
+	log.Level(logf.ERROR).Msg("_")
+	log.Level(logf.ERROR + 4).Msg("_")	
+}
+
 func proofs(log *logf.Logger) {
 	println()
 	log.Msg("lorem ipsum...")
@@ -73,7 +112,7 @@ func proofs(log *logf.Logger) {
 
 func styles() {
 	log := logf.New().
-		Layout("level", "time", "label", "message", "tags", "\n", " ", "attrs").
+		Layout("level", "time", "label", "message", "tags", "\n", "attrs").
 		Level(logf.LevelBar).
 		Time("dim", logf.TimeShort).
 		Tag("method", "bright yellow").
@@ -95,13 +134,13 @@ func styles() {
 		"parent_id", nil,
 	))
 
-	log.Msg("request #{http.uuid}", baggage)
+	log.Msgf("request #{http.uuid}", baggage)
 }
 
 func reality() {
 	h := logf.New().
 		AddSource(true).
-		Layout("level", "time", "message", "\n", " ", "attrs", "\n", " ", "source" ).
+		Layout("level", "time", "message", "\n", "attrs", "\n", "source" ).
 		Logger().
 		Handler()
 

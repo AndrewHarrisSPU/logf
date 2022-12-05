@@ -13,14 +13,14 @@ import (
 
 type pen string
 
-func (p pen) use(b *Buffer){
+func (p pen) use(b *Buffer) {
 	if len(p) > 0 {
 		b.WriteString(string(p))
 	}
 	return
 }
 
-func (p pen) drop(b *Buffer){
+func (p pen) drop(b *Buffer) {
 	if len(p) > 0 {
 		b.WriteString("\x1b[0m")
 	}
@@ -157,31 +157,31 @@ var (
 	SourceShort Encoder[SourceLine]
 )
 
-func encGroupOpen(b *Buffer, _ any) {
+func encGroupOpen(b *Buffer, _ struct{}) {
 	b.WriteString("{")
 }
 
-func encGroupClose(b *Buffer, count int){
+func encGroupClose(b *Buffer, count int) {
 	for i := 0; i < count; i++ {
 		b.WriteByte('}')
 	}
 	return
 }
 
-func encKey(b *Buffer, key string){
+func encKey(b *Buffer, key string) {
 	b.WriteString(key)
 	b.WriteString(":")
 }
 
-func encValue(b *Buffer, v Value){
+func encValue(b *Buffer, v Value) {
 	b.WriteValue(v, nil)
 }
 
-func encTag(b *Buffer, a Attr){
+func encTag(b *Buffer, a Attr) {
 	b.WriteValue(a.Value, nil)
 }
 
-func encLevelText(b *Buffer, level slog.Level){
+func encLevelText(b *Buffer, level slog.Level) {
 	// compute padding
 	width := len(level.String())
 
@@ -193,11 +193,33 @@ func encLevelText(b *Buffer, level slog.Level){
 	b.WriteString("      "[:pad])
 }
 
-func encLevelBar(b *Buffer, level slog.Level){
-	b.WriteString("┃")
+func encLevelBullet(b *Buffer, level slog.Level) {
+	switch {
+	case level < INFO:
+		b.WriteString(" ╴ ")
+	case level < WARN:
+		b.WriteString(" ─ ")
+	case level < ERROR:
+		b.WriteString(" ━ ")
+	default:
+		b.WriteString(" ━━")
+	}
 }
 
-func encTimeShort(b *Buffer, t time.Time){
+func encLevelBar(b *Buffer, level slog.Level) {
+	switch {
+	case level < INFO:
+		b.WriteString("▕  ")
+	case level < WARN:
+		b.WriteString("▕▎ ")
+	case level < ERROR:
+		b.WriteString("▕▌ ")
+	default:
+		b.WriteString("▕▊ ")
+	}
+}
+
+func encTimeShort(b *Buffer, t time.Time) {
 	b.WriteString(t.Format("15:04:05"))
 }
 
@@ -206,17 +228,17 @@ type SourceLine struct {
 	Line int
 }
 
-func encSourcePkg(b *Buffer, src SourceLine){
+func encSourcePkg(b *Buffer, src SourceLine) {
 	b.WriteString(filepath.Base(filepath.Dir(src.File)))
 }
 
-func encSourceShort(b *Buffer, src SourceLine){
+func encSourceShort(b *Buffer, src SourceLine) {
 	b.WriteString(filepath.Base(src.File))
 	b.WriteString(":")
 	b.WriteString(strconv.Itoa(src.Line))
 }
 
-func encSourceAbs(b *Buffer, src SourceLine){
+func encSourceAbs(b *Buffer, src SourceLine) {
 	b.WriteString(src.File)
 	b.WriteString(":")
 	b.WriteString(strconv.Itoa(src.Line))

@@ -136,7 +136,7 @@ func (h *Handler) handle(
 	return h.enc.Handle(r)
 }
 
-func (h *Handler) fmt( msg string, args []any) *splicer {
+func (h *Handler) fmt(msg string, args []any) *splicer {
 	s := newSplicer()
 
 	s.join(h.scope, h.attrs, s.scan(msg, args), h.replace)
