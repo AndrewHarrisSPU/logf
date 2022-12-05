@@ -155,21 +155,28 @@ func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr
 				s.export = append(s.export, slog.String(arg, missingArg))
 				return
 			}
-			s.export = append(s.export, slog.Any(arg, args[1]))
+
+			if v, ok := args[1].(slog.LogValuer); ok {
+				a := slog.Any(arg, v.LogValue().Resolve())
+				s.export = append(s.export, a)
+			} else {
+				s.export = append(s.export, slog.Any(arg, args[1]))
+			}
+
 			args = args[2:]
+		case slog.LogValuer:
+			v := arg.LogValue().Resolve()
+			if v.Kind() == slog.GroupKind {
+				s.joinRec(scope, v.Group(), replace)
+			} else {
+				s.export = append(s.export, slog.Any(missingKey, arg))
+			}
+			args = args[1:]
 		case Attr:
 			s.export = append(s.export, arg)
 			args = args[1:]
 		case []Attr:
 			s.export = append(s.export, arg...)
-			args = args[1:]
-		case slog.LogValuer:
-			v := arg.LogValue().Resolve()
-			if v.Kind() == slog.GroupKind {
-				s.export = append(s.export, v.Group()...)
-			} else {
-				s.export = append(s.export, slog.Any(missingKey, arg))
-			}
 			args = args[1:]
 		default:
 			s.export = append(s.export, slog.Any(missingKey, arg))
@@ -180,6 +187,20 @@ func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr
 	// match export
 	for _, a := range s.export {
 		s.match(scope, a, replace)
+	}
+}
+
+func (s *splicer) joinRec(scope string, as []Attr, replace func(Attr) Attr) {
+	for len(as) > 0 {
+		a := as[0]
+		switch a.Value.Kind() {
+		case slog.GroupKind:
+			s.joinRec(scope+"."+a.Key, a.Value.Group(), replace)
+			as = as[1:]
+		default:
+			s.export = append(s.export, a)
+			as = as[1:]
+		}
 	}
 }
 

@@ -148,13 +148,23 @@ func init() {
 }
 
 var (
+	// a minimal Unicode depcition of log level
 	LevelBar    Encoder[slog.Level]
+
+	// [slog.Level.String] text
 	LevelText   Encoder[slog.Level]
-	Message     Encoder[string]
+
+	// with time format "15:04:05"
 	TimeShort   Encoder[time.Time]
+
+	// absolute source file path, plus line number
 	SourceAbs   Encoder[SourceLine]
-	SourcePkg   Encoder[SourceLine]
+
+	// just file:line
 	SourceShort Encoder[SourceLine]
+
+	// just the package
+	SourcePkg   Encoder[SourceLine]
 )
 
 func encGroupOpen(b *Buffer, _ struct{}) {
@@ -223,6 +233,8 @@ func encTimeShort(b *Buffer, t time.Time) {
 	b.WriteString(t.Format("15:04:05"))
 }
 
+// SourceLine is the carrier of information for source annotation [Encoder]s.
+// If source annotations aren't configured, File and Line may be "", 0
 type SourceLine struct {
 	File string
 	Line int

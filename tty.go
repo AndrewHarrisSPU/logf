@@ -13,14 +13,13 @@ import (
 
 // TTY is a component that displays log lines.
 //
-// A TTY is a [slog.Handler], an [io.StringWriter], and an [io.Closer].
+// A TTY is a [slog.Handler], and an [io.StringWriter].
 //
 // On creation, a [TTY] detects whether it is writing to a terminal.
 // If not, log lines are are written to the writer by a [slog.JSONHandler].
 //
-// Additionally, a TTY constructs [Logger]s:
-//   - [TTY.Logger] emits complete log lines
-//   - [TTY.Printer] just emits log messages
+// Some TTY examples can be run with files in the demo folder:
+//   go run demo/<some demo file>.go
 type TTY struct {
 	fmtr *ttyFormatter
 
@@ -69,14 +68,12 @@ type ttySink struct {
 	w   io.Writer
 	ref slog.Leveler
 	mu  *sync.Mutex
-
-	start   time.Time
 	replace func(Attr) Attr
 
 	enabled bool
 }
 
-func (tty *TTY) bounceJSON() *Logger {
+func (tty *TTY) bounceJSON() Logger {
 	cfg := &Config{
 		w:       tty.fmtr.sink.w,
 		ref:     tty.fmtr.sink.ref,
@@ -98,12 +95,12 @@ func (tty *TTY) bounceJSON() *Logger {
 }
 
 // Logger returns a [Logger] that uses the [TTY] as a handler.
-func (tty *TTY) Logger() *Logger {
+func (tty *TTY) Logger() Logger {
 	if !tty.fmtr.sink.enabled {
 		return tty.bounceJSON()
 	}
 
-	return &Logger{h: tty}
+	return Logger{h: tty}
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].
@@ -112,18 +109,9 @@ func (tty *TTY) LogValue() slog.Value {
 	return slog.GroupValue(tty.attrs...)
 }
 
-// StartTimeNow sets a start time used when reporting elapsed time.
-func (tty *TTY) StartTimeNow() {
-	tty.fmtr.sink.mu.Lock()
-	defer tty.fmtr.sink.mu.Unlock()
-
-	tty.fmtr.sink.start = time.Now()
-}
-
 // WriteString satisfies the [io.StringWriter] interface.
 // It is safe to call Write concurrently with other methods that write [TTY] output.
 // A trailing newline is appended to the string.
-// Write trims the [TTY]'s spin buffer, if enabled.
 // If a program detects that a [TTY] does not write to a terminal device, WriteString is a no-op.
 func (tty *TTY) WriteString(s string) (n int, err error) {
 	if !tty.fmtr.sink.enabled {
@@ -139,15 +127,8 @@ func (tty *TTY) WriteString(s string) (n int, err error) {
 // HANDLER
 
 // Enabled reports whether the [TTY] is enabled for logging at the given level.
-// If the [TTY]'s spin buffer is enabled, the [TTY] is enabled at or above the spin buffer's reference level.
-// Otherwise, the [TTY] is enabled at or above the [TTY]'s  reference level.
 func (tty *TTY) Enabled(level slog.Level) bool {
 	return level >= tty.fmtr.sink.ref.Level()
-}
-
-// With differs from [WithAttrs] in that it munges arguments rather than Attrs, and returns a *TTY.
-func (tty *TTY) With(args ...any) *TTY {
-	return tty.WithAttrs(Attrs(args...)).(*TTY)
 }
 
 // See [slog.WithAttrs].

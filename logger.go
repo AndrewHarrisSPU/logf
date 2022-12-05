@@ -8,10 +8,6 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-const labelKey = "label"
-
-var blankLabel = slog.String(labelKey, "")
-
 type Logger struct {
 	h     handler
 	level slog.Level
@@ -22,19 +18,19 @@ type Logger struct {
 // Precisely, the function returns the result of:
 //
 //	UsingHandler(slog.FromContext(ctx).Handler())
-func FromContext(ctx context.Context) *Logger {
+func FromContext(ctx context.Context) Logger {
 	return UsingHandler(slog.FromContext(ctx).Handler())
 }
 
 // UsingHandler returns a Logger employing the given slog.Handler
 //
 // If the given handler is not of a type native to logf, a new [Handler] is constructed, encapsulating the given handler.
-func UsingHandler(h slog.Handler) *Logger {
+func UsingHandler(h slog.Handler) Logger {
 	if h, isLogfHandler := h.(handler); isLogfHandler {
-		return &Logger{h: h}
+		return Logger{h: h}
 	}
 
-	return &Logger{
+	return Logger{
 		h: &Handler{
 			enc:       h,
 			addSource: true,
@@ -43,23 +39,21 @@ func UsingHandler(h slog.Handler) *Logger {
 }
 
 // Level returns a logger emitting at the given level.
-// Level does not modify its receiver in any way.
-func (l Logger) Level(level slog.Level) *Logger {
+func (l Logger) Level(level slog.Level) Logger {
 	l.level = level
-	return &l
+	return l
 }
 
 // Depth is used to modulate source file/line retrieval.
-// Depth does not modify its receiver in any way.
-func (l Logger) Depth(depth int) *Logger {
+func (l Logger) Depth(depth int) Logger {
 	l.depth = depth
-	return &l
+	return l
 }
 
 // With appends attributes held in a [Logger]'s handler.
 // Arguments are converted to attributes with [Attrs].
-func (l *Logger) With(args ...any) *Logger {
-	return &Logger{
+func (l Logger) With(args ...any) Logger {
+	return Logger{
 		h:     l.h.WithAttrs(Attrs(args...)).(handler),
 		level: l.level,
 		depth: l.depth,
@@ -67,16 +61,18 @@ func (l *Logger) With(args ...any) *Logger {
 }
 
 // Group calls [slog.Logger.WithGroup] on a [Logger]'s handler.
-func (l *Logger) Group(name string) *Logger {
-	return &Logger{
+func (l Logger) Group(name string) Logger {
+	return Logger{
 		h:     l.h.WithGroup(name).(handler),
 		level: l.level,
 		depth: l.depth,
 	}
 }
 
-func (l *Logger) Tag(tag string) *Logger {
-	return &Logger{
+// Tag configures a tag that appears in [TTY] log output.
+// Tags set by this method override; only one is set per logger.
+func (l Logger) Tag(tag string) Logger {
+	return Logger{
 		h:     l.h.withTag(tag),
 		level: l.level,
 		depth: l.depth,
@@ -84,17 +80,19 @@ func (l *Logger) Tag(tag string) *Logger {
 }
 
 // Handler returns a handler associated with the Logger.
-func (l *Logger) Handler() slog.Handler {
+func (l Logger) Handler() slog.Handler {
 	return l.h.(slog.Handler)
 }
 
+
+// LogValue returns the set of [Attr]s accrued by the Logger's handler.
 func (l Logger) LogValue() slog.Value {
 	return l.h.LogValue()
 }
 
 // LOGGING METHODS
 
-// Msg interpolates a message string, and logs it.
+// Msg logs the given message string. No interpolation is performed.
 func (l Logger) Msg(msg string, args ...any) {
 	if !l.h.Enabled(l.level) {
 		return
@@ -105,6 +103,7 @@ func (l Logger) Msg(msg string, args ...any) {
 	l.h.handle(s, l.level, msg, nil, l.depth, args)
 }
 
+// Msgf performs interpolation on the given message string, and logs.
 func (l Logger) Msgf(msg string, args ...any) {
 	if !l.h.Enabled(l.level) {
 		return
@@ -117,6 +116,7 @@ func (l Logger) Msgf(msg string, args ...any) {
 }
 
 // Err logs a message, appending the error string to the message text.
+// Interpolation is performed on the given message string.
 func (l Logger) Err(msg string, err error, args ...any) {
 	if !l.h.Enabled(l.level) {
 		return
@@ -127,7 +127,7 @@ func (l Logger) Err(msg string, err error, args ...any) {
 	l.h.handle(s, l.level, msg, err, l.depth, args)
 }
 
-// Msgf applies interpolation and formatting.
+// Fmt applies interpolation to the given message string.
 // The resulting string is returned, rather than logged.
 func (l Logger) Fmt(msg string, args ...any) string {
 	s := l.h.fmt(msg, args)
@@ -136,7 +136,8 @@ func (l Logger) Fmt(msg string, args ...any) string {
 	return s.line()
 }
 
-// Errf applies interpolation and formatting to wrap an error.
+// NewErr applies interpolation and formatting to wrap an error.
+// If the given err is nil, a new error is constructed.
 // The resulting error is returned, rather than logged.
 func (l Logger) NewErr(msg string, err error, args ...any) error {
 	s := l.h.fmt(msg, args)

@@ -112,7 +112,7 @@ func proofs(log *logf.Logger) {
 
 func styles() {
 	log := logf.New().
-		Layout("level", "time", "label", "message", "tags", "\n", "attrs").
+		Layout("level", "time", "message", "tags", "\n", "attrs").
 		Level(logf.LevelBar).
 		Time("dim", logf.TimeShort).
 		Tag("method", "bright yellow").

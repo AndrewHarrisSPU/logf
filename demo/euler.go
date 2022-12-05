@@ -8,12 +8,12 @@ import (
 )
 
 type gopher struct {
-	log *logf.Logger
+	log logf.Logger
 	id  int
 	sum int
 }
 
-func newGopher(log *logf.Logger, i int) gopher {
+func newGopher(log logf.Logger, i int) gopher {
 	return gopher{
 		log: log.
 			Level(logf.DEBUG).

@@ -21,7 +21,7 @@ func BenchmarkLoggerSize(b *testing.B) {
 	b.Run("slog with 40", benchSlogWith40)
 }
 
-var globalLog *Logger
+var globalLog Logger
 var globalSlog *slog.Logger
 
 func benchLogfInitManual(b *testing.B) {
@@ -32,7 +32,7 @@ func benchLogfInitManual(b *testing.B) {
 			enc:       slog.NewJSONHandler(io.Discard),
 			addSource: false,
 		}
-		globalLog = &Logger{h, INFO, 0}
+		globalLog = Logger{h, INFO, 0}
 	}
 }
 

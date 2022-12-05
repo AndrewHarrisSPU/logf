@@ -16,6 +16,11 @@ func Group(name string, as []Attr) Attr {
 	return slog.Group(name, as...)
 }
 
+// See [slog.GroupValue]
+func GroupValue(as []Attr) Value {
+	return slog.GroupValue(as...)
+}
+
 // Attrs constructs a slice of Attrs from a list of arguments. In a loop evaluating the first remaining element:
 //   - A string is interpreted as a key for a following value. An Attr consuming two list elements is appended to the return.
 //   - An Attr is appended to the return.
@@ -33,12 +38,6 @@ func Attrs(args ...any) (as []Attr) {
 			}
 			as = append(as, slog.Any(arg, args[1]))
 			args = args[2:]
-		case Attr:
-			as = append(as, arg)
-			args = args[1:]
-		case []Attr:
-			as = append(as, arg...)
-			args = args[1:]
 		case slog.LogValuer:
 			v := arg.LogValue().Resolve()
 			if v.Kind() == slog.GroupKind {
@@ -46,6 +45,12 @@ func Attrs(args ...any) (as []Attr) {
 			} else {
 				as = append(as, slog.Any(missingKey, arg))
 			}
+			args = args[1:]
+		case Attr:
+			as = append(as, arg)
+			args = args[1:]
+		case []Attr:
+			as = append(as, arg...)
 			args = args[1:]
 		default:
 			as = append(as, slog.Any(missingKey, arg))

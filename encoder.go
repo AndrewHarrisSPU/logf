@@ -9,10 +9,21 @@ import (
 
 // ENCODERS
 
+// Encoder writes values of type T to a [Buffer] containing a [TTY] log line.
+//
+// Flavors of Encoder expected by [TTY] encoding:
+//  - time: Encoder[time.Time]
+//  - level: Encoder[slog.Level]
+//  - message: Encdoer[string]
+//  - tag: Encoder[Attr]
+//  - attr key: Encoder[string]
+//  - attr value: Encoder[Value]
+//  - source: Encoder[SourceLine]
 type Encoder[T any] interface {
 	Encode(*Buffer, T)
 }
 
+// EncodeFunc returns a T-flavored [Encoder] from a compatible function.
 func EncodeFunc[T any](fn func(*Buffer, T)) Encoder[T] {
 	return encFunc[T](fn)
 }
@@ -264,12 +275,6 @@ func (tty *TTY) encListAttrs(b *Buffer, scope string, as []Attr) {
 }
 
 func (tty *TTY) encExportTags(b *Buffer) {
-	// if tag, found := tty.fmtr.tag["#"]; found {
-	// 	b.writeSep()
-	// 	tag.Encode(b, tty.tag)
-	// 	b.sep = ' '
-	// }
-
 	if tty.tag.Key == "#" {
 		b.writeSep()
 		tty.fmtr.tag["#"].Encode(b, tty.tag)

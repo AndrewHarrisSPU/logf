@@ -18,11 +18,11 @@ const testTTYoutput = `   INFO    ok
 func TestTTY(t *testing.T) {
 	var buf bytes.Buffer
 
-	log := func() *Logger {
+	log := func() Logger {
 		return New().
 			Writer(&buf).
 			Ref(DEBUG).
-			Layout("level", "label", "message", "\t", "attrs").
+			Layout("level", "tags", "message", "\t", "attrs").
 			Colors(false).
 			Level(LevelText).
 			ForceTTY().
@@ -50,6 +50,46 @@ func TestTTY(t *testing.T) {
 	if buf.String() != testTTYoutput {
 		t.Log(buf.String())
 		t.Log(testTTYoutput)
+		t.Error("TTY output")
+	}
+}
+
+type logmap map[string]Value
+
+func (lm logmap) LogValue() Value {
+	var as []Attr
+	for k, v := range lm {
+		as = append(as, KV(k, v))
+	}
+
+	return GroupValue(as)
+}
+
+const testTTYLogValuerOutput = `▕▎ value1nested
+`
+
+func TestLogValuer(t *testing.T) {
+	var buf bytes.Buffer
+
+	log := New().
+		Writer(&buf).
+		Layout("level", "tags", "message").
+		Colors(false).
+		ForceTTY().
+		Logger()
+
+	lm := logmap{
+		"key1": KV( "", "value1").Value,
+		"key2": logmap{
+			"key1nested": KV("", "value1nested").Value,
+		}.LogValue(),
+	}
+
+	log.Msgf("{key1nested}", lm )
+
+	if buf.String() != testTTYLogValuerOutput {
+		t.Log(buf.String())
+		t.Log(testTTYLogValuerOutput)
 		t.Error("TTY output")
 	}
 }

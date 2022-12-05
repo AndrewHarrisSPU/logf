@@ -8,6 +8,46 @@ import (
 	"github.com/AndrewHarrisSPU/logf"
 )
 
+type mapWithLogValueMethod map[string]any
+
+func (mv mapWithLogValueMethod) LogValue() logf.Value {
+	var as []logf.Attr
+	for k, v := range mv {
+		as = append(as, logf.KV(k, v))
+	}
+
+	return logf.GroupValue(as)
+}
+
+func Example_interpolatonLogValuer() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	vmap := mapWithLogValueMethod{
+		"first":  1,
+		"second": [2]struct{}{},
+		"third":  "Hello, world",
+	}
+
+	log.Msgf("{vmap.first}", "vmap", vmap)
+	log.Msgf("{vmap.second}", "vmap", vmap)
+
+	// VERY SUBTLE:
+	// this won't work, becuase vmap is not associated with "vmap"
+	log.Msgf("{vmap.third}", vmap)
+
+	// this works
+	log.Msgf("{third}", vmap)
+
+	// Output:
+	// 1
+	// [{} {}]
+	// !missing-attr
+	// Hello, world
+}
+
 // Interpolation can require escaping of '{', '}', and ':'
 func Example_interpolationEscapes() {
 	log := logf.New().
@@ -182,7 +222,7 @@ func Example_structureErrors() {
 	// i. logging the error
 	log.Err("", err)
 
-	// ii. wrapping the error, with no msg -> add label
+	// ii. wrapping the error, with no msg -> the error
 	err2 := log.NewErr("", err)
 	fmt.Println(err2.Error())
 
@@ -232,7 +272,7 @@ func ExampleLogger_Fmt() {
 	// msg: coconut pie
 }
 
-func ExampleLogger_Errf() {
+func ExampleLogger_NewErr() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -345,4 +385,42 @@ func ExampleLogger_With() {
 
 	// Output:
 	// species:gopher
+}
+
+func ExampleLogger_Tag() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	l1 := log.Tag("Log-9000")
+	l2 := l1.Tag("Log-9001")
+
+	l1.Msg("Hi!")
+	l2.Msg("Plus one!")
+
+	// Output:
+	// Log-9000 Hi!
+	// Log-9001 Plus one!
+}
+
+func ExampleEncoder() {
+	noTime := func(buf *logf.Buffer, t time.Time){
+		buf.WriteString( "???" )
+	}
+
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Level(logf.LevelBar).
+		Source("", logf.SourceShort).
+		AddSource(true).
+		Time("", logf.EncodeFunc(noTime)).
+		Logger()
+
+	log.Msg("...")
+
+	// Output:
+	// ▕▎ ??? ...
+	//    example_test.go:421
 }

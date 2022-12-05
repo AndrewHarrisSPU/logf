@@ -119,9 +119,9 @@ func TestAllocLoggerKinds(t *testing.T) {
 	var fmtFns []func()
 
 	for i, f := range fs {
-		argFns = append(argFns, allocLoggerArgFunc(*log, f.arg, f.verb))
-		withFns = append(argFns, allocLoggerWithFunc(*log, i, f.arg, f.verb))
-		fmtFns = append(argFns, allocLoggerFmtFunc(*log, i, f.arg, f.verb))
+		argFns = append(argFns, allocLoggerArgFunc(log, f.arg, f.verb))
+		withFns = append(argFns, allocLoggerWithFunc(log, i, f.arg, f.verb))
+		fmtFns = append(argFns, allocLoggerFmtFunc(log, i, f.arg, f.verb))
 	}
 
 	for i, f := range fs {
