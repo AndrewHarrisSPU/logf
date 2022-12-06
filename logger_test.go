@@ -43,27 +43,27 @@ func TestMalformed(t *testing.T) {
 	h, want := testlog.Substrings(t)
 	log := UsingHandler(h)
 
-	log.Msgf("{}")
+	log.Msg("{}")
 	want(missingAttr)
 
-	log.Msgf("{item}")
+	log.Msg("{item}")
 	want(missingAttr)
 
 	// only a single string in args - not enough for an Attr
-	log.Msgf("no interpolation", "not-a-key")
+	log.Msg("no interpolation", "not-a-key")
 	want(missingArg)
 
 	// no key string
-	log.Msgf("no interpolation", 0)
+	log.Msg("no interpolation", 0)
 	want(missingKey)
 
 	// both xs appear, first wins for interpolation
-	log.Msgf("{}", slog.Int("x", 1), slog.Int("x", 2))
+	log.Msg("{}", slog.Int("x", 1), slog.Int("x", 2))
 	want(`"msg":"1","x":1,"x":2`)
 
 	// both bools appear (no deduplication)
 	// also: second bool wins for interpolation
-	log.With("bit", true).Msgf("{bit}", slog.Bool("bit", false))
+	log.With("bit", true).Msg("{bit}", slog.Bool("bit", false))
 	want(`"msg":"false","bit":true,"bit":false`)
 }
 
@@ -71,47 +71,47 @@ func TestEscaping(t *testing.T) {
 	h, want := testlog.Substrings(t)
 	log := UsingHandler(h)
 
-	log.Msgf(`\{+\}`)
+	log.Msg(`\{+\}`)
 	want(`"msg":"\\{+\\}"`)
 
-	log.Msgf(":")
+	log.Msg(":")
 	want(`"msg":":"`)
 
-	log.Msgf("{:}", "unkeyed", "foo")
+	log.Msg("{:}", "unkeyed", "foo")
 	want(`"msg":"foo"`)
 
-	log.Msgf(`file\.txt`)
+	log.Msg(`file\.txt`)
 	want(`"msg":"file\\.txt"`)
 
-	log.With("{}", "x").Msgf(`{\{\}}`)
+	log.With("{}", "x").Msg(`{\{\}}`)
 	want(`"msg":"x"`)
 
-	log.With("alpha", "x").Msgf("{alpha:%3s}")
+	log.With("alpha", "x").Msg("{alpha:%3s}")
 	want(`"msg":"  x"`)
 
-	log.With("{}", "x").Msgf(`{\{\}:%3s}`)
+	log.With("{}", "x").Msg(`{\{\}:%3s}`)
 	want(`"msg":"  x"`)
 
-	log.Msgf("{:%3s}", "unkeyed", "x")
+	log.Msg("{:%3s}", "unkeyed", "x")
 	want(`"msg":"  x"`)
 
-	log.Msgf(`{\:%3s}`, slog.String(`:%3s`, "esc"))
+	log.Msg(`{\:%3s}`, slog.String(`:%3s`, "esc"))
 	want(`"msg":"esc"`)
 
-	log.With(`:attr`, "common-lisp").Msgf(`{\:attr}`)
+	log.With(`:attr`, "common-lisp").Msg(`{\:attr}`)
 	want(`"msg":"common-lisp"`)
 
-	log.Msgf("About that struct\\{\\}...")
+	log.Msg("About that struct\\{\\}...")
 	want(`"msg":"About that struct\\{\\}..."`)
 
-	log.With(":color", "mauve").Msgf("The color is {\\:color}.")
+	log.With(":color", "mauve").Msg("The color is {\\:color}.")
 	want(`"msg":"The color is mauve."`)
 
-	log.With("x:y ratio", 2).Msgf(`What a funny ratio: {x\:y ratio}!`)
+	log.With("x:y ratio", 2).Msg(`What a funny ratio: {x\:y ratio}!`)
 	want(`"msg":"What a funny ratio: 2!"`)
 
 	// There is an extra slash introduced by JSON escaping vs Text escaping
-	log.Msgf(`\{\\`)
+	log.Msg(`\{\\`)
 	want(`"msg":"\\{\\\\"`)
 
 	// Needs JSON Handler; Text escapes the ZWNJ in 👩‍🦰
@@ -142,17 +142,17 @@ func TestGroups(t *testing.T) {
 
 	// one group
 	mulder := slog.Group("1", slog.String("first", "Fox"), slog.String("last", "Mulder"))
-	log.Msgf("Hi, {1.first} {1.last}", mulder)
+	log.Msg("Hi, {1.first} {1.last}", mulder)
 	want("Hi, Fox Mulder")
 
 	// two (nested) groups
 	scully := slog.Group("2", slog.String("first", "Dana"), slog.String("last", "Scully"))
 	agents := slog.Group("agents", mulder, scully)
-	log.Msgf("Hi, {agents.1.last} and {agents.2.last}", agents)
+	log.Msg("Hi, {agents.1.last} and {agents.2.last}", agents)
 	want("Hi, Mulder and Scully")
 
 	// raw
-	log.Msgf("{} {first}", agents, "first", "1?")
+	log.Msg("{} {first}", agents, "first", "1?")
 	want(`"msg":"[1=[first=Fox last=Mulder] 2=[first=Dana last=Scully]] 1?"`)
 }
 
@@ -162,25 +162,25 @@ func TestGroups2(t *testing.T) {
 	// one scope
 	log := UsingHandler(h)
 	mulder := log.Group("agent").With("first", "Fox", "last", "Mulder")
-	mulder.Msgf("Hi, {agent.last}")
+	mulder.Msg("Hi, {agent.last}")
 	want("Hi, Mulder")
 
 	// another scope
 	log = UsingHandler(h)
 	files := log.Group("files").With("x", true)
-	files.Msgf("{files.x}")
+	files.Msg("{files.x}")
 	want(`"msg":"true"`)
 
 	// two scopes, and a group
 	log = UsingHandler(h)
 	log = log.Group("files").Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
-	log.Msgf("Hi, {files.agent.name.last}")
+	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 
 	// branching in scope
 	log = UsingHandler(h)
 	log = log.Group("files").With("x", true).Group("agent").With(slog.Group("name", slog.String("last", "Scully")))
-	log.Msgf("Hi, {files.agent.name.last}")
+	log.Msg("Hi, {files.agent.name.last}")
 	want("Hi, Scully")
 }
 
@@ -254,7 +254,7 @@ func TestLoggerKinds(t *testing.T) {
 
 	for _, f := range fs {
 		msg := fmt.Sprintf("{:%s}", f.verb)
-		log.Msgf(msg, "unkeyed", f.arg)
+		log.Msg(msg, "unkeyed", f.arg)
 		want(f.want)
 	}
 }
@@ -312,10 +312,10 @@ func TestReplaceTTY(t *testing.T) {
 
 	log = log.With("secret", 1)
 
-	log.Msgf("{secret}", "secret", 2)
+	log.Msg("{secret}", "secret", 2)
 	want(`redacted   secret:redacted secret:redacted`)
 
-	log.Msgf("{group.secret}, {group.group2.secret}", Group("group", Attrs(
+	log.Msg("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
 		Group("group2", Attrs(
 			KV("secret", 4),
@@ -350,7 +350,7 @@ func TestReplaceSlog(t *testing.T) {
 	log = log.With("secret", 1)
 
 	log.Msg("{secret}", "secret", 2)
-	want(`"msg":"{secret}","secret":"redacted","secret":"redacted"`)
+	want(`"msg":"redacted","secret":"redacted","secret":"redacted"`)
 
 	log.Msg("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
@@ -359,5 +359,5 @@ func TestReplaceSlog(t *testing.T) {
 			KV("secret", 5),
 		)),
 	)))
-	want(`"msg":"{group.secret}, {group.group2.secret}","secret":"redacted","group":{"secret":"redacted","group2":{"secret":"redacted","secret":"redacted"}}`)
+	want(`"msg":"redacted, redacted","secret":"redacted","group":{"secret":"redacted","group2":{"secret":"redacted","secret":"redacted"}}`)
 }

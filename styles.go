@@ -149,22 +149,22 @@ func init() {
 
 var (
 	// a minimal Unicode depcition of log level
-	LevelBar    Encoder[slog.Level]
+	LevelBar Encoder[slog.Level]
 
 	// [slog.Level.String] text
-	LevelText   Encoder[slog.Level]
+	LevelText Encoder[slog.Level]
 
 	// with time format "15:04:05"
-	TimeShort   Encoder[time.Time]
+	TimeShort Encoder[time.Time]
 
 	// absolute source file path, plus line number
-	SourceAbs   Encoder[SourceLine]
+	SourceAbs Encoder[SourceLine]
 
 	// just file:line
 	SourceShort Encoder[SourceLine]
 
 	// just the package
-	SourcePkg   Encoder[SourceLine]
+	SourcePkg Encoder[SourceLine]
 )
 
 func encGroupOpen(b *Buffer, _ struct{}) {

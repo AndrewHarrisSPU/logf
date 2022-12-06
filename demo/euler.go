@@ -9,7 +9,6 @@ import (
 
 type gopher struct {
 	log logf.Logger
-	id  int
 	sum int
 }
 
@@ -19,7 +18,6 @@ func newGopher(log logf.Logger, i int) gopher {
 			Level(logf.DEBUG).
 			Tag("gopher").
 			With("id", i),
-		id:  i,
 		sum: 0,
 	}
 }
@@ -28,9 +26,9 @@ func (g gopher) add(ns <-chan int, sums chan<- int) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			g.log.Msgf("{id}: {sum}", "sum", g.sum)
+			g.log.Msg("{id}: {sum}", "sum", g.sum)
 		}
-		g.log.Msgf("{id} done")
+		g.log.Msg("{id} done")
 		sums <- g.sum
 	}()
 }

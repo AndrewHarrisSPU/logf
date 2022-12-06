@@ -79,13 +79,13 @@ func TestLogValuer(t *testing.T) {
 		Logger()
 
 	lm := logmap{
-		"key1": KV( "", "value1").Value,
+		"key1": KV("", "value1").Value,
 		"key2": logmap{
 			"key1nested": KV("", "value1nested").Value,
 		}.LogValue(),
 	}
 
-	log.Msgf("{key1nested}", lm )
+	log.Msg("{logmap.key2.key1nested}", "logmap", lm)
 
 	if buf.String() != testTTYLogValuerOutput {
 		t.Log(buf.String())

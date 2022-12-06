@@ -104,10 +104,10 @@ func TestAllocLoggerKinds(t *testing.T) {
 		{3, 3, 3, slog.GroupValue(slog.Int("A", 1), slog.Int("B", 2)), ""},
 
 		// LogValuer
-		{1, 1, 1, spoof0{}, ""},
-		{2, 2, 2, spoof0{}, "%10s"},
-		{1, 1, 1, spoof2{}, ""},
-		{2, 2, 2, spoof2{}, "%10s"},
+		{2, 2, 2, spoof0{}, ""},
+		{3, 3, 3, spoof0{}, "%10s"},
+		{2, 2, 2, spoof2{}, ""},
+		{3, 3, 3, spoof2{}, "%10s"},
 	}
 
 	log := New().
@@ -147,7 +147,7 @@ func allocLoggerArgFunc(log Logger, arg any, verb string) func() {
 	}
 
 	return func() {
-		log.Msgf(msg, "key", arg)
+		log.Msg(msg, "key", arg)
 	}
 }
 
@@ -157,7 +157,7 @@ func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 	log = log.With(key, arg)
 
 	return func() {
-		log.Msgf(msg)
+		log.Msg(msg)
 	}
 }
 
@@ -180,7 +180,7 @@ func TestAllocLoggerGroups(t *testing.T) {
 	log = log.With(g)
 
 	fn := func() {
-		log.Msgf("")
+		log.Msg("")
 	}
 
 	t.Run("group", func(t *testing.T) {
