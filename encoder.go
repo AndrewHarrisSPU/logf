@@ -12,13 +12,13 @@ import (
 // Encoder writes values of type T to a [Buffer] containing a [TTY] log line.
 //
 // Flavors of Encoder expected by [TTY] encoding:
-//  - time: Encoder[time.Time]
-//  - level: Encoder[slog.Level]
-//  - message: Encdoer[string]
-//  - tag: Encoder[Attr]
-//  - attr key: Encoder[string]
-//  - attr value: Encoder[Value]
-//  - source: Encoder[SourceLine]
+//   - time: Encoder[time.Time]
+//   - level: Encoder[slog.Level]
+//   - message: Encdoer[string]
+//   - tag: Encoder[Attr]
+//   - attr key: Encoder[string]
+//   - attr value: Encoder[Value]
+//   - source: Encoder[SourceLine]
 type Encoder[T any] interface {
 	Encode(*Buffer, T)
 }

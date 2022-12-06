@@ -19,7 +19,8 @@ import (
 // If not, log lines are are written to the writer by a [slog.JSONHandler].
 //
 // Some TTY examples can be run with files in the demo folder:
-//   go run demo/<some demo file>.go
+//
+//	go run demo/<some demo file>.go
 type TTY struct {
 	fmtr *ttyFormatter
 
@@ -65,9 +66,9 @@ type ttyFormatter struct {
 
 // ttySink manages state relevant to writing bytes on-screen (or wherever)
 type ttySink struct {
-	w   io.Writer
-	ref slog.Leveler
-	mu  *sync.Mutex
+	w       io.Writer
+	ref     slog.Leveler
+	mu      *sync.Mutex
 	replace func(Attr) Attr
 
 	enabled bool

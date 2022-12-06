@@ -119,8 +119,7 @@ func styles() {
 		Tag("span_id", "yellow").
 		Logger()
 
-	log.Group("http")
-
+	log = log.Group("http")
 	log = log.With("method", "GET", "uuid", 1)
 	log = log.Tag("styles")
 
@@ -134,7 +133,7 @@ func styles() {
 		"parent_id", nil,
 	))
 
-	log.Msgf("request #{http.uuid}", baggage)
+	log.Msg("request #{http.uuid}", baggage)
 }
 
 func reality() {

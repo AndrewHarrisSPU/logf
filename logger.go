@@ -55,7 +55,7 @@ func (l Logger) Depth(depth int) Logger {
 func (l Logger) With(args ...any) Logger {
 	return Logger{
 		// h:     l.h.WithAttrs(Attrs(args...)).(handler),
-		h: l.h.WithAttrs(parseAttrs(args)).(handler),
+		h:     l.h.WithAttrs(parseAttrs(args)).(handler),
 		level: l.level,
 		depth: l.depth,
 	}
@@ -85,7 +85,6 @@ func (l Logger) Handler() slog.Handler {
 	return l.h.(slog.Handler)
 }
 
-
 // LogValue returns the set of [Attr]s accrued by the Logger's handler.
 func (l Logger) LogValue() slog.Value {
 	return l.h.LogValue()
@@ -93,19 +92,8 @@ func (l Logger) LogValue() slog.Value {
 
 // LOGGING METHODS
 
-// Msg logs the given message string. No interpolation is performed.
+// Msg performs interpolation on the given message string, and logs.
 func (l Logger) Msg(msg string, args ...any) {
-	if !l.h.Enabled(l.level) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, l.level, msg, nil, l.depth, args)
-}
-
-// Msgf performs interpolation on the given message string, and logs.
-func (l Logger) Msgf(msg string, args ...any) {
 	if !l.h.Enabled(l.level) {
 		return
 	}

@@ -64,7 +64,6 @@ func writerIsTerminal(w io.Writer) bool {
 //   - [Config.Printer] returns a [Logger], based on a [TTY], with a preset layout.
 //   - [Config.JSON] returns a [Logger] based on a [slog.JSONHandler]
 //   - [Config.Text] returns a [Logger] based on a [slog.TextHandler]
-//
 type Config struct {
 	// sink config
 	w           io.Writer

@@ -31,15 +31,15 @@ func Example_interpolatonLogValuer() {
 		"third":  "Hello, world",
 	}
 
-	log.Msgf("{vmap.first}", "vmap", vmap)
-	log.Msgf("{vmap.second}", "vmap", vmap)
+	log.Msg("{vmap.first}", "vmap", vmap)
+	log.Msg("{vmap.second}", "vmap", vmap)
 
 	// VERY SUBTLE:
 	// this won't work, becuase vmap is not associated with "vmap"
-	log.Msgf("{vmap.third}", vmap)
+	log.Msg("{vmap.third}", vmap)
 
 	// this works
-	log.Msgf("{third}", vmap)
+	log.Msg("{third}", vmap)
 
 	// Output:
 	// 1
@@ -56,20 +56,20 @@ func Example_interpolationEscapes() {
 		Printer()
 
 	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
-	log.Msgf(`:-}`)
+	log.Msg(`:-}`)
 
 	// Also surreal: escaping into JSON
-	log.Msgf(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
+	log.Msg(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
 
 	// A single colon is parsed as a separator between an interpolation key and a formatting verb
-	log.Msgf(`{:}`, "", "plaintext")
+	log.Msg(`{:}`, "", "plaintext")
 
 	// Escaping a common lisp keyword symbol
-	log.Msgf(`{\:keyword}`, ":keyword", "lisp")
+	log.Msg(`{\:keyword}`, ":keyword", "lisp")
 
 	// \Slashes, "quotes", and `backticks`
-	log.Msgf("{\\\\}", `\`, `slash`)
-	log.Msgf(`{\\}`, `\`, `slash`)
+	log.Msg("{\\\\}", `\`, `slash`)
+	log.Msg(`{\\}`, `\`, `slash`)
 
 	// Output:
 	// :-}
@@ -86,8 +86,8 @@ func Example_formattingVerbs() {
 		ForceTTY().
 		Printer()
 
-	log.Msgf("{left-pad:%010d}", "left-pad", 1)
-	log.Msgf("pi is about {pi:%6.5f}", "pi", 355.0/113)
+	log.Msg("{left-pad:%010d}", "left-pad", 1)
+	log.Msg("pi is about {pi:%6.5f}", "pi", 355.0/113)
 
 	// Output:
 	// 0000000001
@@ -101,7 +101,7 @@ func Example_interpolationArguments() {
 		Printer()
 
 	// Unkeyed `{}` symbols parse key/value pairs in the logging call:
-	log.Msgf("The {} {} {} ...",
+	log.Msg("The {} {} {} ...",
 		"speed", "quick",
 		"color", "brown",
 		"animal", "fox",
@@ -113,7 +113,7 @@ func Example_interpolationArguments() {
 		"color", "brindle",
 		"animal", "Boston Terrier",
 	)
-	log.Msgf("The {speed} {color} {animal} ...", "speed", "rocketing")
+	log.Msg("The {speed} {color} {animal} ...", "speed", "rocketing")
 
 	// Output:
 	// The quick brown fox ...
@@ -129,7 +129,7 @@ func Example_interpolationArgumentsMixed() {
 
 	// Because only 3.14 is used for unkeyed interpolation,
 	// "greek" and "π" parse to an attribute
-	log.Msgf("{greek}: {}", "pi", 3.14, "greek", "π")
+	log.Msg("{greek}: {}", "pi", 3.14, "greek", "π")
 
 	// Output:
 	// π: 3.14   pi:3.14 greek:π
@@ -143,20 +143,20 @@ func Example_inerpolationTimeVerbs() {
 		ForceTTY().
 		Printer()
 
-	log.Msgf("time interpolation formatting:")
-	log.Msgf("no verb {}", time.Time{})
-	log.Msgf("RFC3339 {:RFC3339}", time.Time{})
-	log.Msgf("kitchen {:kitchen}", time.Time{})
-	log.Msgf("timestamp {:stamp}", time.Time{})
-	log.Msgf("epoch {:epoch}", time.Time{})
+	log.Msg("time interpolation formatting:")
+	log.Msg("no verb {}", time.Time{})
+	log.Msg("RFC3339 {:RFC3339}", time.Time{})
+	log.Msg("kitchen {:kitchen}", time.Time{})
+	log.Msg("timestamp {:stamp}", time.Time{})
+	log.Msg("epoch {:epoch}", time.Time{})
 
 	// custom formatting uses strings like time.Layout, using a semicolon rather than ':'
-	log.Msgf("custom {:15;03;04}", time.Time{})
+	log.Msg("custom {:15;03;04}", time.Time{})
 
-	log.Msgf("duration interpolation formatting:")
+	log.Msg("duration interpolation formatting:")
 	d := time.Unix(1000, 0).Sub(time.Unix(1, 0))
-	log.Msgf("no verb {}", d)
-	log.Msgf("epoch {:epoch}", d)
+	log.Msg("no verb {}", d)
+	log.Msg("epoch {:epoch}", d)
 
 	// Output:
 	// time interpolation formatting:
@@ -194,14 +194,14 @@ func Example_structure() {
 	agent := logf.Group("agent", mulder)
 
 	log = log.With(agent)
-	log.Msgf("The Truth Is Out There")
+	log.Msg("The Truth Is Out There")
 
 	// A Logger is a LogValuer, and the value is a slog.Group
 	print := logf.New().
 		Colors(false).
 		ForceTTY().
 		Printer()
-	print.Msgf("{}", log)
+	print.Msg("{}", log)
 
 	// Output:
 	// The Truth Is Out There   agent:{files:X title:Special Agent name:Fox Mulder}
@@ -293,7 +293,7 @@ func ExampleLogger_NewErr() {
 	// (matched invalid pizza error)
 }
 
-func ExampleLogger_Msgf() {
+func ExampleLogger_Msg() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -302,8 +302,8 @@ func ExampleLogger_Msgf() {
 	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
 
 	log.Msg("Hello, world")
-	log.Msgf("{}", "", "Hello, world")
-	log.Msgf("With menace, {aliens} uttered \"{}\"", "", "Hello, world")
+	log.Msg("{}", "", "Hello, world")
+	log.Msg("With menace, {aliens} uttered \"{}\"", "", "Hello, world")
 
 	// Output:
 	// Hello, world
@@ -341,9 +341,9 @@ func ExampleLogger_Group() {
 		Group("inner").With("x", 2).
 		Group("local")
 
-	log.Msgf("outer {outer.x}", "x", 3)
-	log.Msgf("inner {outer.inner.x}", "x", 3)
-	log.Msgf("local {outer.inner.local.x}", "x", 3)
+	log.Msg("outer {outer.x}", "x", 3)
+	log.Msg("inner {outer.inner.x}", "x", 3)
+	log.Msg("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
 	// outer 1   outer:{x:1 inner: {x:2 x:3}}}
@@ -405,8 +405,8 @@ func ExampleLogger_Tag() {
 }
 
 func ExampleEncoder() {
-	noTime := func(buf *logf.Buffer, t time.Time){
-		buf.WriteString( "???" )
+	noTime := func(buf *logf.Buffer, t time.Time) {
+		buf.WriteString("???")
 	}
 
 	log := logf.New().

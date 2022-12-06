@@ -37,8 +37,11 @@ func parseAttr(list *[]Attr, args []any) (tail []any) {
 			return nil
 		}
 
-		// ok
-		*list = append(*list, slog.Any(arg, args[1]))
+		if v, ok := args[1].(slog.LogValuer); ok {
+			*list = append(*list, slog.Any(arg, v.LogValue().Resolve()))
+		} else {
+			*list = append(*list, slog.Any(arg, args[1]))
+		}
 		return args[2:]
 
 	// ok
