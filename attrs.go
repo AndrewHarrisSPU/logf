@@ -21,6 +21,51 @@ func GroupValue(as []Attr) Value {
 	return slog.GroupValue(as...)
 }
 
+func parseAttrs(args []any) (as []Attr) {
+	for len(args) > 0 {
+		args = parseAttr(&as, args)
+	}
+	return
+}
+
+func parseAttr(list *[]Attr, args []any) (tail []any) {
+	switch arg := args[0].(type) {
+	case string:
+		// no further values -> missingArg
+		if len(args) == 1 {
+			*list = append(*list, slog.String(arg, missingArg))
+			return nil
+		}
+
+		// ok
+		*list = append(*list, slog.Any(arg, args[1]))
+		return args[2:]
+
+	// ok
+	case Attr:
+		*list = append(*list, arg)
+		return args[1:]
+
+	// ok, flatten
+	case []Attr:
+		*list = append(*list, arg...)
+		return args[1:]
+
+	case slog.LogValuer:
+		v := arg.LogValue().Resolve()
+
+		// ok, arg expands to a group, flatten
+		if v.Kind() == slog.GroupKind {
+			*list = append(*list, v.Group()...)
+			return args[1:]
+		}
+		// a bare value falls through
+	}
+
+	*list = append(*list, slog.Any(missingKey, args[0]))
+	return args[1:]
+}
+
 // Attrs constructs a slice of Attrs from a list of arguments. In a loop evaluating the first remaining element:
 //   - A string is interpreted as a key for a following value. An Attr consuming two list elements is appended to the return.
 //   - An Attr is appended to the return.

@@ -89,19 +89,19 @@ func TestAllocLoggerKinds(t *testing.T) {
 		{0, 0, 0, 1, ""},
 		{2, 2, 2, -1, "%+8d"},
 		{0, 0, 0, uint64(1), ""},
-		{0, 0, 0, 1.0, ""},
-		{2, 2, 2, 1.111, "%2.1f"},
+		{2, 2, 2, 1.0, ""},
+		{4, 4, 4, 1.111, "%2.1f"},
 
 		// time
 		{1, 1, 1, time.Now(), ""},
-		{1, 1, 1, time.Now(), time.Kitchen},
+		{0, 0, 0, time.Now(), time.Kitchen},
 		{1, 1, 1, time.Since(time.Now()), ""},
 
 		// any
-		{1, 1, 1, struct{}{}, ""},
+		{2, 2, 2, struct{}{}, ""},
 
 		// group
-		{3, 3, 3, slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), ""},
+		{3, 3, 3, slog.GroupValue(slog.Int("A", 1), slog.Int("B", 2)), ""},
 
 		// LogValuer
 		{1, 1, 1, spoof0{}, ""},
@@ -127,13 +127,13 @@ func TestAllocLoggerKinds(t *testing.T) {
 	for i, f := range fs {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run("arg "+label, func(t *testing.T) {
-			wantAllocs(t, f.argAlloc+2, argFns[i])
+			wantAllocs(t, f.argAlloc+3, argFns[i])
 		})
 		t.Run("with "+label, func(t *testing.T) {
-			wantAllocs(t, f.withAlloc+2, withFns[i])
+			wantAllocs(t, f.withAlloc+3, withFns[i])
 		})
 		t.Run("fmt "+label, func(t *testing.T) {
-			wantAllocs(t, f.fmtAlloc+2, fmtFns[i])
+			wantAllocs(t, f.fmtAlloc+3, fmtFns[i])
 		})
 	}
 }
@@ -147,27 +147,27 @@ func allocLoggerArgFunc(log Logger, arg any, verb string) func() {
 	}
 
 	return func() {
-		log.Msgf(msg, arg)
+		log.Msgf(msg, "key", arg)
 	}
 }
 
 func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 	key := fmt.Sprintf("%d", n)
 	msg := fmt.Sprintf("{%s}", key)
-	log.With(key, arg)
+	log = log.With(key, arg)
 
 	return func() {
-		log.Msgf(msg, arg)
+		log.Msgf(msg)
 	}
 }
 
 func allocLoggerFmtFunc(log Logger, n int, arg any, verb string) func() {
 	key := fmt.Sprintf("%d", n)
 	msg := fmt.Sprintf("{%s}", key)
-	log.With(key, arg)
+	log = log.With(key, arg)
 
 	return func() {
-		_ = log.Fmt(msg, nil)
+		_ = log.Fmt(msg)
 	}
 }
 
