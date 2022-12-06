@@ -51,7 +51,7 @@ type splicer struct {
 	dict map[string]slog.Value
 
 	// holds ordered list of unkeyed arguments
-	list []any
+	list []Attr
 
 	// holds ordered list of exported attrs
 	export []Attr
@@ -70,7 +70,7 @@ var spool = sync.Pool{
 			text:    make([]byte, 0, 1024),
 			scratch: make([]byte, 0, 1024),
 			dict:    make(map[string]slog.Value, 5),
-			list:    make([]any, 0, 5),
+			list:    make([]Attr, 0, 5),
 			export:  make([]Attr, 0, 5),
 		}
 	},
@@ -100,7 +100,7 @@ func (s *splicer) clear() {
 
 	// zero out and clear reference-holding components
 	for i := range s.list {
-		s.list[i] = nil
+		s.list[i] = Attr{}
 	}
 	s.list = s.list[:0]
 
@@ -122,21 +122,21 @@ func (s *splicer) line() string {
 
 // JOIN / MATCH
 
-func (s *splicer) listUnkeyed(n int, args []any) []any {
-	for i := 0; i < n; i++ {
-		if len(args) == 0 {
-			s.list = append(s.list, missingArg)
-			continue
-		}
-		s.list = append(s.list, args[0])
-		if a, isAttr := args[0].(Attr); isAttr {
-			s.export = append(s.export, a)
-		}
+// func (s *splicer) listUnkeyed(n int, args []any) []any {
+// 	for i := 0; i < n; i++ {
+// 		if len(args) == 0 {
+// 			s.list = append(s.list, missingArg)
+// 			continue
+// 		}
+// 		s.list = append(s.list, args[0])
+// 		if a, isAttr := args[0].(Attr); isAttr {
+// 			s.export = append(s.export, a)
+// 		}
 
-		args = args[1:]
-	}
-	return args
-}
+// 		args = args[1:]
+// 	}
+// 	return args
+// }
 
 // read attrs and remaining args
 // update interpolation dictionary and export list

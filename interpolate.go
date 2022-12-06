@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"unicode/utf8"
+
+	"golang.org/x/exp/slog"
 )
 
 // SCAN
@@ -33,7 +35,7 @@ func (s *splicer) scan(msg string, args []any) []any {
 		}
 	}
 
-	args = s.listUnkeyed(nUnkeyed, args)
+	args = s.scanParseUnkeyed(nUnkeyed, args)
 	return args
 }
 
@@ -123,6 +125,19 @@ func (s *splicer) scanUnescapeKey(key string) string {
 	rpos := len(s.scratch)
 
 	return string(s.scratch[lpos:rpos])
+}
+
+func (s *splicer) scanParseUnkeyed(n int, args []any) []any {
+	for i := 0; i < n; i++ {
+		if len(args) == 0 {
+			s.list = append(s.list, slog.String("err", missingAttr))
+			continue
+		}
+		args = parseAttr(&s.list, args)
+		s.export = append(s.export, s.list[i])
+	}
+	// copy(s.export, s.list)
+	return args
 }
 
 // INTERPOLATE

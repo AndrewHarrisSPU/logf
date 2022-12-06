@@ -54,7 +54,8 @@ func (l Logger) Depth(depth int) Logger {
 // Arguments are converted to attributes with [Attrs].
 func (l Logger) With(args ...any) Logger {
 	return Logger{
-		h:     l.h.WithAttrs(Attrs(args...)).(handler),
+		// h:     l.h.WithAttrs(Attrs(args...)).(handler),
+		h: l.h.WithAttrs(parseAttrs(args)).(handler),
 		level: l.level,
 		depth: l.depth,
 	}

@@ -62,7 +62,7 @@ func Example_interpolationEscapes() {
 	log.Msgf(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
 
 	// A single colon is parsed as a separator between an interpolation key and a formatting verb
-	log.Msgf(`{:}`, "plaintext")
+	log.Msgf(`{:}`, "", "plaintext")
 
 	// Escaping a common lisp keyword symbol
 	log.Msgf(`{\:keyword}`, ":keyword", "lisp")
@@ -100,11 +100,11 @@ func Example_interpolationArguments() {
 		ForceTTY().
 		Printer()
 
-	// Unkeyed `{}` symbols draw one argument each from a logging call:
+	// Unkeyed `{}` symbols parse key/value pairs in the logging call:
 	log.Msgf("The {} {} {} ...",
-		"quick",
-		"brown",
-		"fox",
+		"speed", "quick",
+		"color", "brown",
+		"animal", "fox",
 	)
 
 	// Keyed `{key}` symbols interpolate on attribute keys
@@ -129,10 +129,10 @@ func Example_interpolationArgumentsMixed() {
 
 	// Because only 3.14 is used for unkeyed interpolation,
 	// "greek" and "π" parse to an attribute
-	log.Msgf("{greek}: {}", 3.14, "greek", "π")
+	log.Msgf("{greek}: {}", "pi", 3.14, "greek", "π")
 
 	// Output:
-	// π: 3.14   greek:π
+	// π: 3.14   pi:3.14 greek:π
 }
 
 // Interpolation of time values in message strings.
@@ -205,7 +205,7 @@ func Example_structure() {
 
 	// Output:
 	// The Truth Is Out There   agent:{files:X title:Special Agent name:Fox Mulder}
-	// [agent=[files=X title=Special Agent name=Fox Mulder]]
+	// [files=X title=Special Agent name=Fox Mulder]
 }
 
 // With a logf.Logger and interpolation, there are a variety of ways to handle an error
@@ -234,7 +234,7 @@ func Example_structureErrors() {
 	//   - log's type is logf.Logger
 	//   - a logf.Logger is also a slog.LogValuer
 	//   - "{}" consumes log's LogValue
-	err4 := log.NewErr("{}", err, log)
+	err4 := log.NewErr("{}", err, "log", log)
 	fmt.Println(err4.Error())
 
 	// Output:
@@ -302,8 +302,8 @@ func ExampleLogger_Msgf() {
 	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
 
 	log.Msg("Hello, world")
-	log.Msgf("{}", "Hello, world")
-	log.Msgf("With menace, {aliens} uttered \"{}\"", "Hello, world")
+	log.Msgf("{}", "", "Hello, world")
+	log.Msgf("With menace, {aliens} uttered \"{}\"", "", "Hello, world")
 
 	// Output:
 	// Hello, world

@@ -44,7 +44,7 @@ func TestMalformed(t *testing.T) {
 	log := UsingHandler(h)
 
 	log.Msgf("{}")
-	want(missingArg)
+	want(missingAttr)
 
 	log.Msgf("{item}")
 	want(missingAttr)
@@ -77,7 +77,7 @@ func TestEscaping(t *testing.T) {
 	log.Msgf(":")
 	want(`"msg":":"`)
 
-	log.Msgf("{:}", "foo")
+	log.Msgf("{:}", "unkeyed", "foo")
 	want(`"msg":"foo"`)
 
 	log.Msgf(`file\.txt`)
@@ -92,7 +92,7 @@ func TestEscaping(t *testing.T) {
 	log.With("{}", "x").Msgf(`{\{\}:%3s}`)
 	want(`"msg":"  x"`)
 
-	log.Msgf("{:%3s}", "x")
+	log.Msgf("{:%3s}", "unkeyed", "x")
 	want(`"msg":"  x"`)
 
 	log.Msgf(`{\:%3s}`, slog.String(`:%3s`, "esc"))
@@ -240,7 +240,7 @@ func TestLoggerKinds(t *testing.T) {
 		{struct{}{}, "", `"msg":"{}"`},
 
 		// group
-		{slog.Group("row", slog.Int("A", 1), slog.Int("B", 2)), "", `"msg":"[A=1 B=2]"`},
+		{slog.GroupValue(slog.Int("A", 1), slog.Int("B", 2)), "", `"msg":"[A=1 B=2]"`},
 
 		// LogValuer
 		{spoof0{}, "", `"msg":"spoof"`},
@@ -254,7 +254,7 @@ func TestLoggerKinds(t *testing.T) {
 
 	for _, f := range fs {
 		msg := fmt.Sprintf("{:%s}", f.verb)
-		log.Msgf(msg, f.arg)
+		log.Msgf(msg, "unkeyed", f.arg)
 		want(f.want)
 	}
 }
