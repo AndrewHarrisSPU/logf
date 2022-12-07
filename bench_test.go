@@ -32,7 +32,7 @@ func benchLogfInitManual(b *testing.B) {
 			enc:       slog.NewJSONHandler(io.Discard),
 			addSource: false,
 		}
-		globalLog = Logger{h, INFO, 0}
+		globalLog = newLogger(h)
 	}
 }
 
@@ -112,7 +112,7 @@ func BenchmarkAttrs(b *testing.B) {
 		// {"fastText discard", newFastTextHandler(io.Discard)},
 		{"Text discard", slog.NewTextHandler(io.Discard)},
 		{"JSON discard", slog.HandlerOptions{AddSource: false}.NewJSONHandler(io.Discard)},
-		{"logf discard", New().Writer(io.Discard).JSON().h.(*Handler)},
+		{"logf discard", New().Writer(io.Discard).JSON().h},
 	} {
 		logger := slog.New(handler.h)
 		b.Run(handler.name, func(b *testing.B) {
@@ -235,27 +235,28 @@ func BenchmarkSplicer(b *testing.B) {
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			s.scan(TestMessage, nil)
+			s.scanMessage(TestMessage)
 		}
 	})
 
-	b.Run("splicer join 5 attrs 5 args", func(b *testing.B) {
-		s := newSplicer()
-		defer s.free()
+	// b.Run("splicer join 5 attrs 5 args", func(b *testing.B) {
+	// 	s := newSplicer()
+	// 	defer s.free()
 
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			s.scan(TestMessage, nil)
-			s.join("", TestAttrs, TestAny5, nil)
-		}
-	})
+	// 	b.ReportAllocs()
+	// 	for i := 0; i < b.N; i++ {
+	// 		s.joinAttrList(TestAttrs)
+	// 		s.joinList(TestAny5)
+	// 	}
+	// })
 
 	b.Run("splicer interpolate 5 unkeyed", func(b *testing.B) {
 		s := newSplicer()
 		defer s.free()
 
-		s.scan("{} {} {} {} {}", TestAny5)
-		s.join("", nil, TestAny5, nil)
+		s.joinList(TestAny5)
+		s.scanMessage("{} {} {} {} {}")
+		s.matchAll("", nil, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -267,8 +268,9 @@ func BenchmarkSplicer(b *testing.B) {
 		s := newSplicer()
 		defer s.free()
 
-		s.scan("{string} {status} {duration} {time} {error}", nil)
-		s.join("", TestAttrs, nil, nil)
+		s.joinList(TestAny5)
+		s.scanMessage("{string} {status} {duration} {time} {error}")
+		s.matchAll("", nil, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -299,7 +301,7 @@ func BenchmarkInterpolation(b *testing.B) {
 	}{
 		{
 			label: "0 interp, 5 args",
-			fn:    func() { log.Msg("", TestAny5...) },
+			fn:    func() { log.Info("", TestAny5...) },
 		},
 		{
 			label: "slog, 5 args",
@@ -307,11 +309,19 @@ func BenchmarkInterpolation(b *testing.B) {
 		},
 		{
 			label: "5 unkeyed, 5 args",
-			fn:    func() { log.Msg("{} {} {} {} {}", TestAny5...) },
+			fn: func() {
+				log.Info("{} {} {} {} {}",
+					TestAny5[0],
+					TestAny5[1],
+					TestAny5[2],
+					TestAny5[3],
+					TestAny5[4],
+				)
+			},
 		},
 		{
 			label: "0 interp, with 5",
-			fn:    func() { log5.Msg(TestMessage) },
+			fn:    func() { log5.Info(TestMessage) },
 		},
 		{
 			label: "slogger with 5",
@@ -319,35 +329,39 @@ func BenchmarkInterpolation(b *testing.B) {
 		},
 		{
 			label: "string interp, with 5",
-			fn:    func() { log5.Msg("{string}") },
+			fn:    func() { log5.Info("{string}") },
+		},
+		{
+			label: "string interp, with 40",
+			fn:    func() { log40.Info("{string}") },
 		},
 		{
 			label: "time interp, with 5",
-			fn:    func() { log5.Msg("{time}") },
+			fn:    func() { log5.Info("{time}") },
 		},
 		{
 			label: "all interp, arg 5",
-			fn:    func() { log.Msg("{string} {status} {duration} {time} {error}", TestAny5...) },
+			fn:    func() { log.Info("{string} {status} {duration} {time} {error}", TestAny5...) },
 		},
 		{
 			label: "all interp, with 5",
-			fn:    func() { log5.Msg("{string} {status} {duration} {time} {error}") },
+			fn:    func() { log5.Info("{string} {status} {duration} {time} {error}") },
 		},
 		{
 			label: "all interp, with 10",
 			fn: func() {
-				log10.Msg("{string} {status} {duration} {time} {error} {string2} {status2} {duration2} {time2} {error2}")
+				log10.Info("{string} {status} {duration} {time} {error} {string2} {status2} {duration2} {time2} {error2}")
 			},
 		},
 		{
 			label: "all interp, with 40",
 			fn: func() {
-				log40.Msg(`{1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25} {26} {27} {28} {29} {30} {31} {32} {33} {34} {35} {36} {37} {38} {39} {40}`)
+				log40.Info(`{1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25} {26} {27} {28} {29} {30} {31} {32} {33} {34} {35} {36} {37} {38} {39} {40}`)
 			},
 		},
 		{
 			label: "0 interp, with 40",
-			fn:    func() { log40.Msg("") },
+			fn:    func() { log40.Info("") },
 		},
 		{
 			label: "slogger with 40",
@@ -374,9 +388,11 @@ func BenchmarkInterpolation(b *testing.B) {
 
 // func TestSanity(t *testing.T){
 // 	w := os.Stdout
-// 	log := New( Using.JSON, Using.Writer(w))
+// 	log := New.
+// Writer(w).
+// JSON()
 // 	log40 := log.With(TestAny40...)
-// 	log40.Msg( `{1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25} {26} {27} {28} {29} {30} {31} {32} {33} {34} {35} {36} {37} {38} {39} {40}`)
+// 	log40.Info( `{1} {2} {3} {4} {5} {6} {7} {8} {9} {10} {11} {12} {13} {14} {15} {16} {17} {18} {19} {20} {21} {22} {23} {24} {25} {26} {27} {28} {29} {30} {31} {32} {33} {34} {35} {36} {37} {38} {39} {40}`)
 // }
 
 const TestMessage = "Test logging, but use a somewhat realistic message length."

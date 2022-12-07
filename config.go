@@ -437,14 +437,23 @@ func (cfg *Config) JSON() Logger {
 		ReplaceAttr: cfg.replace,
 	}.NewJSONHandler(cfg.w)
 
-	return Logger{
-		h: &Handler{
-			tag:       slog.String("", ""),
-			enc:       enc,
-			addSource: cfg.fmtr.addSource,
-			replace:   cfg.replace,
-		},
+	// return Logger{
+	// 	h: &Handler{
+	// 		tag:       slog.String("", ""),
+	// 		enc:       enc,
+	// 		addSource: cfg.fmtr.addSource,
+	// 		replace:   cfg.replace,
+	// 	},
+	// }
+
+	h := &Handler{
+		tag:       slog.String("", ""),
+		enc:       enc,
+		addSource: cfg.fmtr.addSource,
+		replace:   cfg.replace,
 	}
+
+	return Logger{slog.New(h), h}
 }
 
 // Text returns a Logger using a [slog.TextHandler] for encoding.
@@ -457,12 +466,21 @@ func (cfg *Config) Text() Logger {
 		ReplaceAttr: cfg.replace,
 	}.NewTextHandler(cfg.w)
 
-	return Logger{
-		h: &Handler{
-			tag:       slog.String("", ""),
-			enc:       enc,
-			addSource: cfg.fmtr.addSource,
-			replace:   cfg.replace,
-		},
+	// return Logger{
+	// 	h: &Handler{
+	// 		tag:       slog.String("", ""),
+	// 		enc:       enc,
+	// 		addSource: cfg.fmtr.addSource,
+	// 		replace:   cfg.replace,
+	// 	},
+	// }
+
+	h := &Handler{
+		tag:       slog.String("", ""),
+		enc:       enc,
+		addSource: cfg.fmtr.addSource,
+		replace:   cfg.replace,
 	}
+
+	return Logger{slog.New(h), h}
 }

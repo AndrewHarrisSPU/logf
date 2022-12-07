@@ -18,6 +18,7 @@ func main() {
 		Ref(logf.DEBUG).
 		Layout("level", "time", "tags", "message", "source").
 		Time("dim", logf.TimeShort).
+		Source("dim", logf.SourceShort).
 		Tag("place", "cyan").
 		// 	logf.Tag( "place", "bright blue" ),
 		// 	logf.Styler("i", "magenta", "bright magenta"),

@@ -219,7 +219,7 @@ func encLevelBullet(b *Buffer, level slog.Level) {
 func encLevelBar(b *Buffer, level slog.Level) {
 	switch {
 	case level < INFO:
-		b.WriteString("▕  ")
+		b.WriteString(" ▏ ")
 	case level < WARN:
 		b.WriteString("▕▎ ")
 	case level < ERROR:

@@ -17,8 +17,8 @@ func main() {
 		Message("dim").
 		Logger()
 
-	log.Level(-4).Msg("here!")
-	log.Level(0).Msg("here!")
-	log.Level(4).Msg("here!")
-	log.Level(8).Err("here!", errors.New("BLINK"))
+	log.Debug("here!")
+	log.Info("here!")
+	log.Warn("here!")
+	log.Error("here!", errors.New("BLINK"))
 }

@@ -155,9 +155,7 @@ func (tty *TTY) encMsg(b *Buffer, msg string, err error) {
 	b.writeSep()
 
 	tty.fmtr.message.color.use(b)
-	if !b.splicer.ipol(msg) {
-		b.WriteString(msg)
-	}
+	b.splicer.ipol(msg)
 	tty.fmtr.message.color.drop(b)
 
 	// merge error into message

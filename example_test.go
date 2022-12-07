@@ -19,7 +19,7 @@ func (mv mapWithLogValueMethod) LogValue() logf.Value {
 	return logf.GroupValue(as)
 }
 
-func Example_interpolatonLogValuer() {
+func Example_interpolationLogValuer() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -31,21 +31,17 @@ func Example_interpolatonLogValuer() {
 		"third":  "Hello, world",
 	}
 
-	log.Msg("{vmap.first}", "vmap", vmap)
-	log.Msg("{vmap.second}", "vmap", vmap)
+	log.Info("{vmap.first}", "vmap", vmap.LogValue())
+	log.Info("{vmap.second}", "vmap", vmap.LogValue())
 
-	// VERY SUBTLE:
+	// SUBTLE:
 	// this won't work, becuase vmap is not associated with "vmap"
-	log.Msg("{vmap.third}", vmap)
-
-	// this works
-	log.Msg("{third}", vmap)
+	log.Info("{vmap.third}", vmap)
 
 	// Output:
 	// 1
 	// [{} {}]
-	// !missing-attr
-	// Hello, world
+	// !missing-match
 }
 
 // Interpolation can require escaping of '{', '}', and ':'
@@ -56,20 +52,20 @@ func Example_interpolationEscapes() {
 		Printer()
 
 	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
-	log.Msg(`:-}`)
+	log.Info(`:-}`)
 
 	// Also surreal: escaping into JSON
-	log.Msg(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
+	log.Info(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
 
 	// A single colon is parsed as a separator between an interpolation key and a formatting verb
-	log.Msg(`{:}`, "", "plaintext")
+	log.Info(`{:}`, "", "plaintext")
 
 	// Escaping a common lisp keyword symbol
-	log.Msg(`{\:keyword}`, ":keyword", "lisp")
+	log.Info(`{\:keyword}`, ":keyword", "lisp")
 
 	// \Slashes, "quotes", and `backticks`
-	log.Msg("{\\\\}", `\`, `slash`)
-	log.Msg(`{\\}`, `\`, `slash`)
+	log.Info("{\\\\}", `\`, `slash`)
+	log.Info(`{\\}`, `\`, `slash`)
 
 	// Output:
 	// :-}
@@ -86,8 +82,8 @@ func Example_formattingVerbs() {
 		ForceTTY().
 		Printer()
 
-	log.Msg("{left-pad:%010d}", "left-pad", 1)
-	log.Msg("pi is about {pi:%6.5f}", "pi", 355.0/113)
+	log.Info("{left-pad:%010d}", "left-pad", 1)
+	log.Info("pi is about {pi:%6.5f}", "pi", 355.0/113)
 
 	// Output:
 	// 0000000001
@@ -101,7 +97,7 @@ func Example_interpolationArguments() {
 		Printer()
 
 	// Unkeyed `{}` symbols parse key/value pairs in the logging call:
-	log.Msg("The {} {} {} ...",
+	log.Info("The {} {} {} ...",
 		"speed", "quick",
 		"color", "brown",
 		"animal", "fox",
@@ -113,7 +109,7 @@ func Example_interpolationArguments() {
 		"color", "brindle",
 		"animal", "Boston Terrier",
 	)
-	log.Msg("The {speed} {color} {animal} ...", "speed", "rocketing")
+	log.Info("The {speed} {color} {animal} ...", "speed", "rocketing")
 
 	// Output:
 	// The quick brown fox ...
@@ -129,7 +125,7 @@ func Example_interpolationArgumentsMixed() {
 
 	// Because only 3.14 is used for unkeyed interpolation,
 	// "greek" and "π" parse to an attribute
-	log.Msg("{greek}: {}", "pi", 3.14, "greek", "π")
+	log.Info("{greek}: {}", "pi", 3.14, "greek", "π")
 
 	// Output:
 	// π: 3.14   pi:3.14 greek:π
@@ -143,20 +139,20 @@ func Example_inerpolationTimeVerbs() {
 		ForceTTY().
 		Printer()
 
-	log.Msg("time interpolation formatting:")
-	log.Msg("no verb {}", time.Time{})
-	log.Msg("RFC3339 {:RFC3339}", time.Time{})
-	log.Msg("kitchen {:kitchen}", time.Time{})
-	log.Msg("timestamp {:stamp}", time.Time{})
-	log.Msg("epoch {:epoch}", time.Time{})
+	log.Info("time interpolation formatting:")
+	log.Info("no verb {}", time.Time{})
+	log.Info("RFC3339 {:RFC3339}", time.Time{})
+	log.Info("kitchen {:kitchen}", time.Time{})
+	log.Info("timestamp {:stamp}", time.Time{})
+	log.Info("epoch {:epoch}", time.Time{})
 
 	// custom formatting uses strings like time.Layout, using a semicolon rather than ':'
-	log.Msg("custom {:15;03;04}", time.Time{})
+	log.Info("custom {:15;03;04}", time.Time{})
 
-	log.Msg("duration interpolation formatting:")
+	log.Info("duration interpolation formatting:")
 	d := time.Unix(1000, 0).Sub(time.Unix(1, 0))
-	log.Msg("no verb {}", d)
-	log.Msg("epoch {:epoch}", d)
+	log.Info("no verb {}", d)
+	log.Info("epoch {:epoch}", d)
 
 	// Output:
 	// time interpolation formatting:
@@ -194,18 +190,18 @@ func Example_structure() {
 	agent := logf.Group("agent", mulder)
 
 	log = log.With(agent)
-	log.Msg("The Truth Is Out There")
+	log.Info("The Truth Is Out There")
 
 	// A Logger is a LogValuer, and the value is a slog.Group
 	print := logf.New().
 		Colors(false).
 		ForceTTY().
 		Printer()
-	print.Msg("{}", log)
+	print.Info("{}", log)
 
 	// Output:
 	// The Truth Is Out There   agent:{files:X title:Special Agent name:Fox Mulder}
-	// [files=X title=Special Agent name=Fox Mulder]
+	// [agent=[files=X title=Special Agent name=Fox Mulder]]
 }
 
 // With a logf.Logger and interpolation, there are a variety of ways to handle an error
@@ -220,7 +216,7 @@ func Example_structureErrors() {
 	err := errors.New("the system is down")
 
 	// i. logging the error
-	log.Err("", err)
+	log.Error("", err)
 
 	// ii. wrapping the error, with no msg -> the error
 	err2 := log.NewErr("", err)
@@ -238,7 +234,7 @@ func Example_structureErrors() {
 	fmt.Println(err4.Error())
 
 	// Output:
-	// the system is down   emails:{user:Strong Bad id:12345}
+	// the system is down   emails:{user:Strong Bad id:12345 err:the system is down}
 	// the system is down
 	// Strong Bad: the system is down
 	// [emails.user=Strong Bad emails.id=12345]: the system is down
@@ -251,7 +247,7 @@ func ExampleConfig_Layout() {
 		ForceTTY().
 		Logger()
 
-	log.Msg("Hello!", "left", "here")
+	log.Info("Hello!", "left", "here")
 
 	// Output:
 	// left:here Hello!
@@ -293,7 +289,7 @@ func ExampleLogger_NewErr() {
 	// (matched invalid pizza error)
 }
 
-func ExampleLogger_Msg() {
+func ExampleLogger_Info() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -301,9 +297,9 @@ func ExampleLogger_Msg() {
 
 	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
 
-	log.Msg("Hello, world")
-	log.Msg("{}", "", "Hello, world")
-	log.Msg("With menace, {aliens} uttered \"{}\"", "", "Hello, world")
+	log.Info("Hello, world")
+	log.Info("{}", "", "Hello, world")
+	log.Info("With menace, {aliens} uttered \"{}\"", "", "Hello, world")
 
 	// Output:
 	// Hello, world
@@ -311,7 +307,7 @@ func ExampleLogger_Msg() {
 	// With menace, Kang and Kodos, the Conquerors of Rigel VII uttered "Hello, world"
 }
 
-func ExampleLogger_Err() {
+func ExampleLogger_Error() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -319,11 +315,11 @@ func ExampleLogger_Err() {
 
 	errNegative := errors.New("negative number")
 
-	log.Err("", errNegative)
+	log.Error("", errNegative)
 
 	log = log.With("component", "math")
 	err := log.NewErr("{component}: square root of {}", errNegative, -1)
-	log.Err("", err)
+	log.Error("", err)
 
 	// Output:
 	// negative number
@@ -341,36 +337,14 @@ func ExampleLogger_Group() {
 		Group("inner").With("x", 2).
 		Group("local")
 
-	log.Msg("outer {outer.x}", "x", 3)
-	log.Msg("inner {outer.inner.x}", "x", 3)
-	log.Msg("local {outer.inner.local.x}", "x", 3)
+	log.Info("outer {outer.x}", "x", 3)
+	log.Info("inner {outer.inner.x}", "x", 3)
+	log.Info("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
 	// outer 1   outer:{x:1 inner: {x:2 x:3}}}
 	// inner 2   outer:{x:1 inner: {x:2 x:3}}}
 	// local 3   outer:{x:1 inner: {x:2 x:3}}}
-}
-
-func ExampleLogger_Level() {
-	log := logf.New().
-		Colors(false).
-		Ref(logf.INFO). // the reference level (receiver type is *Config)
-		ForceTTY().
-		Printer().
-		Level(logf.INFO) // the logger level (receiver type is Logger)
-
-	// not visible, because logger level is less than reference level
-	log.Level(logf.DEBUG).Msg("i'm hiding")
-
-	// visible, because the receiver of the previous call was a new Logger created by log.Level
-	log.Msg("back to INFO level")
-
-	// not visible, because the Logger returned by log.Level is assigned to log
-	log = log.Level(logf.DEBUG)
-	log.Msg("now i'm invisible")
-
-	// Output:
-	// back to INFO level
 }
 
 func ExampleLogger_With() {
@@ -381,7 +355,7 @@ func ExampleLogger_With() {
 		Logger()
 
 	log = log.With("species", "gopher")
-	log.Msg("")
+	log.Info("")
 
 	// Output:
 	// species:gopher
@@ -396,8 +370,8 @@ func ExampleLogger_Tag() {
 	l1 := log.Tag("Log-9000")
 	l2 := l1.Tag("Log-9001")
 
-	l1.Msg("Hi!")
-	l2.Msg("Plus one!")
+	l1.Info("Hi!")
+	l2.Info("Plus one!")
 
 	// Output:
 	// Log-9000 Hi!
@@ -418,9 +392,9 @@ func ExampleEncoder() {
 		Time("", logf.EncodeFunc(noTime)).
 		Logger()
 
-	log.Msg("...")
+	log.Info("...")
 
 	// Output:
 	// ▕▎ ??? ...
-	//    example_test.go:421
+	//    example_test.go:416
 }

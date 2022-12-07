@@ -9,11 +9,11 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func wantAllocs(t *testing.T, want int, fn func()) {
+func wantAllocs(t *testing.T, label string, want int, fn func()) {
 	t.Helper()
 	got := int(testing.AllocsPerRun(5, fn))
 	if want != got {
-		t.Errorf("allocs: want %d, got %d", want, got)
+		t.Errorf("%s allocs: want %d, got %d", label, want, got)
 	}
 }
 
@@ -24,22 +24,24 @@ func TestAllocSplicerKinds(t *testing.T) {
 		verb  string
 	}{
 		{0, "string", ""},
-		{0, "string", "%10s"},
+		{1, "string", "%10s"},
 		{0, true, ""},
 		{0, true, "%-6v"},
-		{0, 1, ""},
-		{0, -1, "%+8d"},
-		{0, uint64(1), ""},
-		{0, 1.0, ""},
-		{0, 1.111, "%2.1f"},
+		{-1, 1, ""},
+		{1, -1, "%+8d"},
+		{-1, uint64(1), ""},
+		{-1, 1.0, ""},
+		{1, 1.111, "%2.1f"},
 		{0, time.Now(), ""},
-		{0, time.Now(), time.Kitchen},
+		{1, time.Now(), "15;04;03"},
 		{0, time.Since(time.Now()), ""},
 		{0, struct{}{}, ""},
 	}
 
+	var ignore []func()
 	var fns []func()
 	for _, f := range fs {
+		ignore = append(ignore, allocSplicerFuncIgnore(f.arg, f.verb))
 		fns = append(fns, allocSplicerFunc(f.arg, f.verb))
 	}
 
@@ -47,9 +49,29 @@ func TestAllocSplicerKinds(t *testing.T) {
 	for i, f := range fs {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run(label, func(t *testing.T) {
+			wantAllocs(t, "ignoring", 1, ignore[i])
 			// plus one for safe freezing
-			wantAllocs(t, f.alloc, fns[i])
+			wantAllocs(t, "splicing", f.alloc+1, fns[i])
 		})
+	}
+}
+
+func allocSplicerFuncIgnore(arg any, verb string) func() {
+	msg := "none"
+	a := slog.Any("key", arg)
+	list := []Attr{a}
+
+	return func() {
+		s := newSplicer()
+		defer s.free()
+
+		s.joinAttrList(list)
+		s.scanMessage(msg)
+		s.matchAll("", nil, nil)
+		if !s.interpolates {
+			s.ipol(msg)
+		}
+		io.WriteString(io.Discard, s.line())
 	}
 }
 
@@ -58,14 +80,19 @@ func allocSplicerFunc(arg any, verb string) func() {
 	if len(verb) == 0 {
 		msg = "{}"
 	} else {
-		msg = fmt.Sprintf("{:%s}", verb)
+		msg = fmt.Sprintf("{key:%s}", verb)
 	}
+
+	a := slog.Any("key", arg)
+	list := []Attr{a}
 
 	return func() {
 		s := newSplicer()
 		defer s.free()
 
-		s.join("", nil, []any{arg}, nil)
+		s.joinAttrList(list)
+		s.scanMessage(msg)
+		s.matchAll("", nil, nil)
 		s.ipol(msg)
 		io.WriteString(io.Discard, s.line())
 	}
@@ -80,34 +107,34 @@ func TestAllocLoggerKinds(t *testing.T) {
 		verb      string
 	}{
 		// strings
-		{0, 1, 1, "string", ""},
-		{2, 2, 2, "string", "%10s"},
+		{0, 0, 0, "string", ""},
+		{1, 1, 1, "string", "%10s"},
 
 		// numeric
-		{1, 1, 1, true, ""},
-		{1, 1, 1, true, "%-6v"},
-		{0, 0, 0, 1, ""},
-		{2, 2, 2, -1, "%+8d"},
-		{0, 0, 0, uint64(1), ""},
-		{2, 2, 2, 1.0, ""},
-		{4, 4, 4, 1.111, "%2.1f"},
+		{0, 0, 0, true, ""},
+		{0, 0, 0, true, "%-6v"},
+		{-1, -1, -1, 1, ""},
+		{1, 1, 1, -1, "%+8d"},
+		{-1, -1, -1, uint64(1), ""},
+		{1, 1, 1, 1.0, ""},
+		{3, 3, 3, 1.111, "%2.1f"},
 
 		// time
-		{1, 1, 1, time.Now(), ""},
-		{0, 0, 0, time.Now(), time.Kitchen},
-		{1, 1, 1, time.Since(time.Now()), ""},
+		{0, 0, 0, time.Now(), ""},
+		{1, 1, 1, time.Now(), time.Kitchen},
+		{0, 0, 0, time.Since(time.Now()), ""},
 
 		// any
-		{2, 2, 2, struct{}{}, ""},
+		{1, 1, 1, struct{}{}, ""},
 
 		// group
-		{3, 3, 3, slog.GroupValue(slog.Int("A", 1), slog.Int("B", 2)), ""},
+		{2, 2, 2, slog.GroupValue(slog.Int("A", 1), slog.Int("B", 2)), ""},
 
 		// LogValuer
-		{2, 2, 2, spoof0{}, ""},
-		{3, 3, 3, spoof0{}, "%10s"},
-		{2, 2, 2, spoof2{}, ""},
-		{3, 3, 3, spoof2{}, "%10s"},
+		{0, 0, 0, spoof0{}, ""},
+		{1, 1, 1, spoof0{}, "%10s"},
+		{0, 0, 0, spoof2{}, ""},
+		{1, 1, 1, spoof2{}, "%10s"},
 	}
 
 	log := New().
@@ -127,13 +154,13 @@ func TestAllocLoggerKinds(t *testing.T) {
 	for i, f := range fs {
 		label := fmt.Sprintf("%d: %T %s", i, f.arg, f.verb)
 		t.Run("arg "+label, func(t *testing.T) {
-			wantAllocs(t, f.argAlloc+3, argFns[i])
+			wantAllocs(t, "arg", f.argAlloc+1, argFns[i])
 		})
 		t.Run("with "+label, func(t *testing.T) {
-			wantAllocs(t, f.withAlloc+3, withFns[i])
+			wantAllocs(t, "with", f.withAlloc+1, withFns[i])
 		})
 		t.Run("fmt "+label, func(t *testing.T) {
-			wantAllocs(t, f.fmtAlloc+3, fmtFns[i])
+			wantAllocs(t, "fmt", f.fmtAlloc+1, fmtFns[i])
 		})
 	}
 }
@@ -147,7 +174,7 @@ func allocLoggerArgFunc(log Logger, arg any, verb string) func() {
 	}
 
 	return func() {
-		log.Msg(msg, "key", arg)
+		log.Info(msg, "key", arg)
 	}
 }
 
@@ -157,7 +184,7 @@ func allocLoggerWithFunc(log Logger, n int, arg any, verb string) func() {
 	log = log.With(key, arg)
 
 	return func() {
-		log.Msg(msg)
+		log.Info(msg)
 	}
 }
 
@@ -180,16 +207,16 @@ func TestAllocLoggerGroups(t *testing.T) {
 	log = log.With(g)
 
 	fn := func() {
-		log.Msg("")
+		log.Info("")
 	}
 
 	t.Run("group", func(t *testing.T) {
-		wantAllocs(t, 1, fn)
+		wantAllocs(t, "group", 0, fn)
 	})
 
-	fn = func() { log.Msg("{1.roman}") }
+	fn = func() { log.Info("{1.roman}") }
 
 	t.Run("group", func(t *testing.T) {
-		wantAllocs(t, 1, fn)
+		wantAllocs(t, "group", 1, fn)
 	})
 }
