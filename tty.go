@@ -101,7 +101,7 @@ func (tty *TTY) Logger() Logger {
 		return tty.bounceJSON()
 	}
 
-	return Logger{h: tty}
+	return Logger{slog.New(tty), tty} // h: tty}
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].
@@ -196,20 +196,18 @@ func (tty *TTY) Handle(r slog.Record) error {
 	s := newSplicer()
 	defer s.free()
 
-	s.scan(r.Message, nil)
-	s.join(tty.scope, tty.attrs, nil, tty.fmtr.sink.replace)
-
 	var err error
 	r.Attrs(func(a Attr) {
-		// capture the latest "err"-keyed Attr
+		s.joinOne(a)
 		if a.Key == "err" {
 			if curr, isErr := a.Value.Any().(error); isErr {
 				err = curr
 			}
 		}
-		// in all cases, capture the attr
-		s.joinOne(tty.scope, a, tty.fmtr.sink.replace)
 	})
+
+	s.scanMessage(r.Message)
+	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
 
 	file, line := r.SourceLine()
 	tty.encFields(s, r.Level, r.Message, err, SourceLine{file, line})
@@ -232,7 +230,9 @@ func (tty *TTY) handle(
 ) error {
 	defer s.free()
 
-	s.join(tty.scope, tty.attrs, args, tty.fmtr.sink.replace)
+	s.joinList(args)
+	s.scanMessage(msg)
+	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
 
 	src := tty.yankSourceLine(depth)
 
@@ -249,7 +249,9 @@ func (tty *TTY) handle(
 func (tty *TTY) fmt(msg string, args []any) *splicer {
 	s := newSplicer()
 
-	s.join(tty.scope, tty.attrs, s.scan(msg, args), tty.fmtr.sink.replace)
+	s.joinList(args)
+	s.scanMessage(msg)
+	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
 	s.ipol(msg)
 
 	return s

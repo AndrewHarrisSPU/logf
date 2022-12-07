@@ -1,7 +1,7 @@
 package logf
 
 import (
-	"time"
+	// "time"
 
 	"golang.org/x/exp/slog"
 )
@@ -14,7 +14,7 @@ type handler interface {
 	slog.LogValuer
 	withTag(string) handler
 	fmt(string, []any) *splicer
-	handle(*splicer, slog.Level, string, error, int, []any) error
+	// handle(*splicer, slog.Level, string, error, int, []any) error
 }
 
 // Handler encapsulates a [slog.Handler] and maintains additional state required for message interpolation.
@@ -88,11 +88,17 @@ func (h *Handler) Handle(r slog.Record) error {
 	s := newSplicer()
 	defer s.free()
 
-	s.scan(r.Message, nil)
-	s.joinOne("", h.tag, nil)
-	s.join(h.scope, h.attrs, nil, h.replace)
-	s.ipol(r.Message)
-	r.Message = s.line()
+	r.Attrs(func(a Attr) {
+		s.joinOne(a)
+	})
+
+	s.scanMessage(r.Message)
+
+	if s.interpolates {
+		s.matchAll(h.scope, h.attrs, h.replace)
+		s.ipol(r.Message)
+		r.Message = s.line()
+	}
 
 	return h.enc.Handle(r)
 }
@@ -105,41 +111,40 @@ func (h *Handler) handle(
 	depth int,
 	args []any,
 ) error {
-	defer s.free()
+	// defer s.free()
 
-	if h.tag.Key != "" {
-		s.joinOne("", h.tag, nil)
-	}
-	s.join(h.scope, h.attrs, args, h.replace)
+	// if h.tag.Key != "" {
+	// 	s.joinOne(h.tag)
+	// }
 
-	if s.ipol(msg) {
-		if err != nil {
-			s.writeError(err)
-		}
-		msg = s.line()
-	} else if err != nil {
-		s.WriteString(msg)
-		s.WriteString(": ")
-		s.WriteString(err.Error())
-		msg = s.line()
-	}
+	// s.joinList(args)
+	// s.scanMessage(msg)
+	// s.matchAll(h.scope, h.attrs, h.replace)
 
-	if h.addSource {
-		depth += 4
-	} else {
-		depth = 0
-	}
+	// s.ipol(msg)
+	// if err != nil {
+	// 	s.writeError(len(msg), err)
+	// }
 
-	r := slog.NewRecord(time.Now(), level, msg, depth, nil)
-	r.AddAttrs(s.export...)
+	// if h.addSource {
+	// 	depth += 4
+	// } else {
+	// 	depth = 0
+	// }
 
-	return h.enc.Handle(r)
+	// r := slog.NewRecord(time.Now(), level, msg, depth, nil)
+	// r.AddAttrs(s.export...)
+
+	// return h.enc.Handle(r)
+	return nil
 }
 
 func (h *Handler) fmt(msg string, args []any) *splicer {
 	s := newSplicer()
 
-	s.join(h.scope, h.attrs, s.scan(msg, args), h.replace)
+	s.joinList(args)
+	s.scanMessage(msg)
+	s.matchAll(h.scope, h.attrs, h.replace)
 	s.ipol(msg)
 
 	return s

@@ -8,17 +8,14 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+var missingMatch = slog.StringValue(`!missing-match`)
+
 // SCAN
 
-// scan occurs before interpolation and before joining
-//   - prematches for keyed interpolation are detected and added to the dictionary
-//   - returns args not consumed by unkeyed interpolations
-func (s *splicer) scan(msg string, args []any) []any {
+func (s *splicer) scanMessage(msg string) (unkeyed int) {
 	var clip string
 	var found bool
-	var nUnkeyed int
 	s.interpolates = false
-
 	for {
 		msg, clip, found = scanNext(msg)
 		if !found {
@@ -29,14 +26,11 @@ func (s *splicer) scan(msg string, args []any) []any {
 		key := s.scanClip(clip)
 		if len(key) > 0 {
 			key = s.scanUnescapeKey(key)
-			s.dict[key] = missingAttrValue
-		} else {
-			nUnkeyed++
+			s.dict[key] = missingMatch
 		}
 	}
 
-	args = s.scanParseUnkeyed(nUnkeyed, args)
-	return args
+	return
 }
 
 func scanNext(msg string) (tail, clip string, found bool) {
@@ -127,26 +121,12 @@ func (s *splicer) scanUnescapeKey(key string) string {
 	return string(s.scratch[lpos:rpos])
 }
 
-func (s *splicer) scanParseUnkeyed(n int, args []any) []any {
-	for i := 0; i < n; i++ {
-		if len(args) == 0 {
-			s.list = append(s.list, slog.String("err", missingAttr))
-			continue
-		}
-		args = parseAttr(&s.list, args)
-		s.export = append(s.export, s.list[i])
-	}
-	// copy(s.export, s.list)
-	return args
-}
-
 // INTERPOLATE
 
-func (s *splicer) ipol(msg string) bool {
+func (s *splicer) ipol(msg string) {
 	if !s.interpolates {
-		// s.writeString(msg)
-		// s.writeUnescape(msg)
-		return false
+		s.WriteString(msg)
+		return
 	}
 
 	var clip []byte
@@ -157,7 +137,6 @@ func (s *splicer) ipol(msg string) bool {
 		}
 		s.ipolAttr(clip)
 	}
-	return true
 }
 
 // scan into unescaped left/right bracket pairs
@@ -232,16 +211,29 @@ func (s *splicer) ipolAttr(clip []byte) {
 }
 
 func (s *splicer) ipolUnkeyed(verb []byte) {
-	var arg any
-	if len(s.list) > 0 {
-		arg = s.list[0]
-		s.list = s.list[1:]
+	var a Attr
+
+	if s.iUnkeyed < len(s.export) {
+		a = s.export[s.iUnkeyed]
+		s.iUnkeyed++
 	} else {
-		s.WriteString(missingArg)
+		s.WriteString(missingAttr)
 		return
 	}
 
-	s.writeArg(arg, verb)
+	// if len(s.list) < s.unkeyed {
+	// 	a = s.export[]
+	// }
+
+	// if len(s.list) > 0 {
+	// 	a = s.list[0]
+	// 	s.list = s.list[1:]
+	// } else {
+	// 	s.WriteString(missingAttr)
+	// 	return
+	// }
+
+	s.WriteValue(a.Value, verb)
 }
 
 func (s *splicer) ipolKeyed(key, verb []byte) {

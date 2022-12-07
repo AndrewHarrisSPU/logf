@@ -9,9 +9,8 @@ import (
 )
 
 type Logger struct {
-	h     handler
-	level slog.Level
-	depth int
+	*slog.Logger
+	h handler
 }
 
 // FromContext employs [slog.FromContext] to obtain a Logger from the given context.
@@ -27,62 +26,55 @@ func FromContext(ctx context.Context) Logger {
 // If the given handler is not of a type native to logf, a new [Handler] is constructed, encapsulating the given handler.
 func UsingHandler(h slog.Handler) Logger {
 	if h, isLogfHandler := h.(handler); isLogfHandler {
-		return Logger{h: h}
+		return Logger{slog.New(h), h}
 	}
 
-	return Logger{
-		h: &Handler{
-			enc:       h,
-			addSource: true,
-		},
+	lh := &Handler{
+		enc:       h,
+		addSource: true,
 	}
+
+	return newLogger(lh)
+
+	// if h, isLogfHandler := h.(handler); isLogfHandler {
+	// 	return Logger{h: h}
+	// }
+
+	// return Logger{
+	// 	h: &Handler{
+	// 		enc:       h,
+	// 		addSource: true,
+	// 	},
+	// }
 }
 
-// Level returns a logger emitting at the given level.
-func (l Logger) Level(level slog.Level) Logger {
-	l.level = level
-	return l
-}
-
-// Depth is used to modulate source file/line retrieval.
-func (l Logger) Depth(depth int) Logger {
-	l.depth = depth
-	return l
+func newLogger(h handler) Logger {
+	return Logger{slog.New(h), h}
 }
 
 // With appends attributes held in a [Logger]'s handler.
 // Arguments are converted to attributes with [Attrs].
 func (l Logger) With(args ...any) Logger {
-	return Logger{
-		// h:     l.h.WithAttrs(Attrs(args...)).(handler),
-		h:     l.h.WithAttrs(parseAttrs(args)).(handler),
-		level: l.level,
-		depth: l.depth,
-	}
+	h := l.h.WithAttrs(parseAttrs(args)).(handler)
+	return newLogger(h)
 }
 
 // Group calls [slog.Logger.WithGroup] on a [Logger]'s handler.
 func (l Logger) Group(name string) Logger {
-	return Logger{
-		h:     l.h.WithGroup(name).(handler),
-		level: l.level,
-		depth: l.depth,
-	}
+	h := l.h.WithGroup(name).(handler)
+	return newLogger(h)
 }
 
 // Tag configures a tag that appears in [TTY] log output.
 // Tags set by this method override; only one is set per logger.
 func (l Logger) Tag(tag string) Logger {
-	return Logger{
-		h:     l.h.withTag(tag),
-		level: l.level,
-		depth: l.depth,
-	}
+	h := l.h.withTag(tag)
+	return newLogger(h)
 }
 
 // Handler returns a handler associated with the Logger.
 func (l Logger) Handler() slog.Handler {
-	return l.h.(slog.Handler)
+	return l.h
 }
 
 // LogValue returns the set of [Attr]s accrued by the Logger's handler.
@@ -91,35 +83,73 @@ func (l Logger) LogValue() slog.Value {
 }
 
 // LOGGING METHODS
-
-// Msg performs interpolation on the given message string, and logs.
-func (l Logger) Msg(msg string, args ...any) {
-	if !l.h.Enabled(l.level) {
-		return
-	}
-
-	s := newSplicer()
-	args = s.scan(msg, args)
-
-	l.h.handle(s, l.level, msg, nil, l.depth, args)
-}
-
-// Err logs a message, appending the error string to the message text.
-// Interpolation is performed on the given message string.
-func (l Logger) Err(msg string, err error, args ...any) {
-	if !l.h.Enabled(l.level) {
+/*
+func (l Logger) Log(level slog.Level, msg string, args ...any){
+	if !l.h.Enabled(level) {
 		return
 	}
 
 	s := newSplicer()
 
-	l.h.handle(s, l.level, msg, err, l.depth, args)
+	l.h.handle(s, level, msg, nil, 0, args)
 }
 
+func (l Logger) Debug(msg string, args ...any) {
+	if !l.h.Enabled(DEBUG) {
+		return
+	}
+
+	s := newSplicer()
+
+	l.h.handle(s, DEBUG, msg, nil, 0, args)
+}
+
+// Info performs interpolation on the given message string, and logs.
+func (l Logger) Info(msg string, args ...any) {
+	if !l.h.Enabled(INFO) {
+		return
+	}
+
+	s := newSplicer()
+
+	l.h.handle(s, INFO, msg, nil, 0, args)
+}
+
+func (l Logger) Warn(msg string, args ...any) {
+	if !l.h.Enabled(WARN) {
+		return
+	}
+
+	s := newSplicer()
+
+	l.h.handle(s, WARN, msg, nil, 0, args)
+}
+
+func (l Logger) Error(msg string, err error, args ...any) {
+	if !l.h.Enabled(ERROR) {
+		return
+	}
+
+	s := newSplicer()
+
+	l.h.handle(s, ERROR, msg, err, 0, args)
+}
+
+func (l Logger) LogDepth(depth int, level slog.Level, msg string, args ...any){
+	if !l.h.Enabled(level) {
+		return
+	}
+
+	s := newSplicer()
+
+	l.h.handle(s, level, msg, nil, depth, args)
+}
+*/
 // Fmt applies interpolation to the given message string.
 // The resulting string is returned, rather than logged.
 func (l Logger) Fmt(msg string, args ...any) string {
 	s := l.h.fmt(msg, args)
+	// s := l.h.fmt(msg, args)
 	defer s.free()
 
 	return s.line()
@@ -130,6 +160,8 @@ func (l Logger) Fmt(msg string, args ...any) string {
 // The resulting error is returned, rather than logged.
 func (l Logger) NewErr(msg string, err error, args ...any) error {
 	s := l.h.fmt(msg, args)
+
+	// s := l.h.fmt(msg, args)
 	defer s.free()
 
 	if err == nil {

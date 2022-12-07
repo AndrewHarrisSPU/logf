@@ -50,11 +50,12 @@ type splicer struct {
 	// holds map of keyed interpolation symbols
 	dict map[string]slog.Value
 
-	// holds ordered list of unkeyed arguments
-	list []Attr
-
 	// holds ordered list of exported attrs
 	export []Attr
+
+	// holds number of unkeyed attrs
+	nUnkeyed int
+	iUnkeyed int
 
 	// false if scanning indicates no interpolation
 	interpolates bool
@@ -70,7 +71,6 @@ var spool = sync.Pool{
 			text:    make([]byte, 0, 1024),
 			scratch: make([]byte, 0, 1024),
 			dict:    make(map[string]slog.Value, 5),
-			list:    make([]Attr, 0, 5),
 			export:  make([]Attr, 0, 5),
 		}
 	},
@@ -83,7 +83,7 @@ func (s *splicer) free() {
 	const maxAttrSize = 128
 
 	ok := cap(s.text)+cap(s.scratch) < maxTextSize
-	ok = ok && (len(s.dict)+cap(s.list)+cap(s.export)) < maxAttrSize
+	ok = ok && (len(s.dict)+cap(s.export)) < maxAttrSize
 
 	if ok {
 		s.clear()
@@ -99,11 +99,6 @@ func (s *splicer) clear() {
 	s.scratch = s.scratch[:0]
 
 	// zero out and clear reference-holding components
-	for i := range s.list {
-		s.list[i] = Attr{}
-	}
-	s.list = s.list[:0]
-
 	for i := range s.export {
 		s.export[i] = Attr{}
 	}
@@ -112,6 +107,8 @@ func (s *splicer) clear() {
 	for k := range s.dict {
 		delete(s.dict, k)
 	}
+
+	s.iUnkeyed = 0
 	s.interpolates = false
 }
 
@@ -122,28 +119,30 @@ func (s *splicer) line() string {
 
 // JOIN / MATCH
 
-// read attrs and remaining args
-// update interpolation dictionary and export list
-func (s *splicer) join(scope string, attrs []Attr, args []any, replace func(Attr) Attr) {
-	// match attrs
-	for _, a := range attrs {
-		s.match(scope, a, replace)
+func (s *splicer) joinAttrList(as []Attr) {
+	for _, a := range as {
+		s.export = append(s.export, a)
 	}
+}
 
+func (s *splicer) joinList(args []any) {
 	for len(args) > 0 {
 		args = parseAttr(&s.export, args)
-	}
-
-	// match export
-	for _, a := range s.export {
-		s.match(scope, a, replace)
 	}
 }
 
 // used for joining Record attrs
-func (s *splicer) joinOne(scope string, a Attr, replace func(Attr) Attr) {
+func (s *splicer) joinOne(a Attr) {
 	s.export = append(s.export, a)
-	s.match(scope, a, replace)
+}
+
+func (s *splicer) matchAll(scope string, as []Attr, replace func(Attr) Attr) {
+	for _, a := range as {
+		s.match(scope, a, replace)
+	}
+	for _, a := range s.export {
+		s.match(scope, a, replace)
+	}
 }
 
 // root of matching invocation
@@ -167,6 +166,20 @@ func (s *splicer) match(scope string, a Attr, replace func(Attr) Attr) {
 		s.dict[scope+a.Key] = a.Value
 		return
 	}
+
+	// if lv, ok := a.Value.Any().(slog.LogValuer); ok {
+	// v := lv.LogValue().Resolve()
+	// if v.Kind() == slog.GroupKind {
+	// 	gpos := len(s.scratch)
+	// 	s.scratch = append(s.scratch, a.Key...)
+	// 	s.scratch = append(s.scratch, '.')
+
+	// 	s.matchRec(v.Group(), gpos, replace)
+
+	// 	s.scratch = s.scratch[:gpos]
+	// }
+	// 	return
+	// }
 
 	if a.Value.Kind() == slog.GroupKind {
 		// store a marker that deliminates s.scratch state before subsequent matchRec operations
@@ -200,6 +213,14 @@ func (s *splicer) matchRec(group []Attr, gpos int, replace func(Attr) Attr) {
 			}
 			s.dict[key] = a.Value
 		}
+
+		// if lv, ok := a.Value.Any().(slog.LogValuer); ok {
+		// 	v := lv.LogValue().Resolve()
+		// 	if v.Kind() == slog.GroupKind {
+		// 		s.scratch = append(s.scratch, '.')
+		// 		s.matchRec(v.Group(), gpos, replace)
+		// 	}
+		// }
 
 		// recursively matchRec, one deeper level
 		// (keep gpos invariant through matchRec)
@@ -336,8 +357,8 @@ func (s *splicer) writeDurationVerb(d time.Duration, verb string) {
 	}
 }
 
-func (s *splicer) writeError(err error) {
-	if len(s.text) > 0 {
+func (s *splicer) writeError(extended int, err error) {
+	if extended > 0 {
 		s.WriteString(": ")
 	}
 	s.WriteString(err.Error())

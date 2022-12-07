@@ -2,7 +2,10 @@ package logf
 
 import (
 	"bytes"
+	"strings"
 	"testing"
+
+	"golang.org/x/exp/slog"
 )
 
 const testTTYoutput = `   INFO    ok
@@ -29,23 +32,23 @@ func TestTTY(t *testing.T) {
 			Logger()
 	}
 
-	log().Msg("ok")
+	log().Info("ok")
 
 	log1 := log().Group("l1")
-	log1.Msg("ok")
+	log1.Info("ok")
 
 	log2 := log1.With("a1", 1)
-	log2.Msg("ok")
+	log2.Info("ok")
 
-	log3 := log().Level(WARN).Group("l2").With("a2", 2)
-	log3.Msg("ok")
+	log3 := log().Group("l2").With("a2", 2)
+	log3.Warn("ok")
 
-	log4 := log().Level(ERROR).Group("l3").With("a3", 3)
+	log4 := log().Group("l3").With("a3", 3)
 
-	log1.Level(DEBUG).Msg("ok")
-	log2.Msg("ok")
-	log3.Msg("ok")
-	log4.Msg("ok")
+	log1.Debug("ok")
+	log2.Info("ok")
+	log3.Warn("ok")
+	log4.Error("ok", nil)
 
 	if buf.String() != testTTYoutput {
 		t.Log(buf.String())
@@ -68,7 +71,7 @@ func (lm logmap) LogValue() Value {
 const testTTYLogValuerOutput = `▕▎ value1nested
 `
 
-func TestLogValuer(t *testing.T) {
+func TestTTYLogValuer(t *testing.T) {
 	var buf bytes.Buffer
 
 	log := New().
@@ -85,11 +88,52 @@ func TestLogValuer(t *testing.T) {
 		}.LogValue(),
 	}
 
-	log.Msg("{logmap.key2.key1nested}", "logmap", lm)
+	log.Info("{lm.key2.key1nested}", "lm", lm.LogValue())
 
 	if buf.String() != testTTYLogValuerOutput {
 		t.Log(buf.String())
 		t.Log(testTTYLogValuerOutput)
 		t.Error("TTY output")
 	}
+}
+
+func TestTTYReplace(t *testing.T) {
+	var b bytes.Buffer
+
+	want := func(want string) {
+		t.Helper()
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("\n\texpected %s\n\tin %s", want, b.String())
+		}
+		b.Reset()
+	}
+
+	log := New().
+		ReplaceFunc(func(a Attr) Attr {
+			if a.Key == "secret" {
+				if a.Value.Kind() != slog.GroupKind {
+					a.Value = slog.StringValue("redacted")
+				}
+			}
+			return a
+		}).
+		Layout("message", "\t", "attrs").
+		Writer(&b).
+		Colors(false).
+		ForceTTY().
+		Logger()
+
+	log = log.With("secret", 1)
+
+	log.Info("{secret}", "secret", 2)
+	want(`redacted   secret:redacted secret:redacted`)
+
+	log.Info("{group.secret}, {group.group2.secret}", Group("group", Attrs(
+		KV("secret", 3),
+		Group("group2", Attrs(
+			KV("secret", 4),
+			KV("secret", 5),
+		)),
+	)))
+	want(`redacted, redacted   secret:redacted group:{secret:redacted group2:{secret:redacted secret:redacted}}`)
 }
