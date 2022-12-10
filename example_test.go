@@ -46,83 +46,48 @@ func Example_basic() {
 		ForceTTY().
 		Printer()
 
+	// Like slog
 	log.Info("Hello, Roswell")
 
-	ufo := errors.New("🛸 spotted")
-	log.Error("", ufo)
-
+	// Some interpolation
 	log = log.With("place", "Roswell")
 	log.Infof("Hello, {place}")
 
+	// Errors
+	ufo := errors.New("🛸 spotted")
+
+	// Like slog
+	log.Error("", ufo)
+
+	// Logging with errors and interpolation
 	log.Errorf("{place}", ufo)
 
+	// Using a logger to wrap an error
 	err := log.WrapErr("{place}", ufo)
 	log.Error("", err)
+
 	// Output:
+	// Hello, Roswell
 	// Hello, Roswell
 	// 🛸 spotted
-	// Hello, Roswell
 	// Roswell: 🛸 spotted
 	// Roswell: 🛸 spotted
 }
 
-func Example_interpolationLogValuer() {
-	log := logf.New().
-		Colors(false).
-		ForceTTY().
-		Printer()
+func ExampleFmt() {
+	// (KV is equivalent to slog.Any)
+	flavor := logf.KV("flavor", "coconut")
 
-	vmap := mapWithLogValueMethod{
-		"first":  1,
-		"second": [2]struct{}{},
-		"third":  "Hello, world",
-	}
-
-	log.Infof("{vmap.first}", "vmap", vmap)
-	log.Infof("{vmap.second}", "vmap", vmap)
-
-	// SUBTLE:
-	// this won't work, becuase vmap is not associated with "vmap"
-	log.Infof("{vmap.third}", vmap)
+	// logf.Fmt works with slog data
+	msg := logf.Fmt("{flavor} pie", flavor)
+	fmt.Println(msg)
 
 	// Output:
-	// 1
-	// [{} {}]
-	// !missing-match
+	// coconut pie
 }
 
-// Interpolation can require escaping of '{', '}', and ':'
-func Example_interpolationEscapes() {
-	log := logf.New().
-		Colors(false).
-		ForceTTY().
-		Printer()
-
-	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
-	log.Infof(`:-}`)
-
-	// Also surreal: escaping into JSON
-	log.Infof(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
-
-	// A single colon is parsed as a separator between an interpolation key and a formatting verb
-	log.Infof(`{:}`, "", "plaintext")
-
-	// Escaping a common lisp keyword symbol
-	log.Infof(`{\:keyword}`, ":keyword", "lisp")
-
-	// \Slashes, "quotes", and `backticks`
-	log.Infof("{\\\\}", `\`, `slash`)
-	log.Infof(`{\\}`, `\`, `slash`)
-
-	// Output:
-	// :-}
-	// {"color":"mauve"}
-	// plaintext
-	// lisp
-	// slash
-	// slash
-}
-
+// Formatting accepts [fmt] package verbs.
+// Verbs appear after the ':' in `{key:verb}` strings.
 func Example_formattingVerbs() {
 	log := logf.New().
 		Colors(false).
@@ -170,17 +135,49 @@ func Example_interpolationArgumentsMixed() {
 		ForceTTY().
 		Logger()
 
-	// Because only 3.14 is used for unkeyed interpolation,
-	// "greek" and "π" parse to an attribute
+	// The unkeyed interpolation token `{}` consumes the first agument pair ("pi", 3.14)
+	// "greek" and "π" parse to a second  attribute, which is interpolated by key
 	log.Infof("{greek}: {}", "pi", 3.14, "greek", "π")
 
 	// Output:
 	// π: 3.14	pi:3.14 greek:π
 }
 
-// Interpolation of time values in message strings.
-// This is distinct from how [Config.TimeFormat], which affects [TTY] time fields.
-func Example_inerpolationTimeVerbs() {
+// Interpolation can require escaping of '{', '}', and ':'
+func Example_interpolationEscapes() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
+	log.Infof(`:-}`)
+
+	// Also surreal: escaping into JSON
+	log.Infof(`\{"{key}":"{value}"\}`, "key", "color", "value", "mauve")
+
+	// A single colon is parsed as a separator between an interpolation key and a formatting verb
+	log.Infof(`{:}`, "", "plaintext")
+
+	// Escaping a common lisp keyword symbol
+	log.Infof(`{\:keyword}`, ":keyword", "lisp")
+
+	// \Slashes, "quotes", and `backticks`
+	log.Infof("{\\\\}", `\`, `slash`)
+	log.Infof(`{\\}`, `\`, `slash`)
+
+	// Output:
+	// :-}
+	// {"color":"mauve"}
+	// plaintext
+	// lisp
+	// slash
+	// slash
+}
+
+// Interpolation of time values accepts some additional verbs.
+// See [Config.TimeFormat] for formatting of [TTY] time fields.
+func Example_interpolationTimeVerbs() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -214,8 +211,34 @@ func Example_inerpolationTimeVerbs() {
 	// epoch 999000000000
 }
 
+// Interpolation of [slog.LogValuer]s is powerful, but can be subtle.
+func Example_interpolationLogValuer() {
+	log := logf.New().
+		Colors(false).
+		ForceTTY().
+		Printer()
+
+	vmap := mapWithLogValueMethod{
+		"first":  1,
+		"second": [2]struct{}{},
+		"third":  "Hello, world",
+	}
+
+	log.Infof("{vmap.first}", "vmap", vmap)
+	log.Infof("{vmap.second}", "vmap", vmap)
+
+	// SUBTLE:
+	// this won't work, becuase vmap is not associated with "vmap"
+	log.Infof("{vmap.third}", vmap)
+
+	// Output:
+	// 1
+	// [{} {}]
+	// !missing-match
+}
+
 // Building attributes is essential to capturing structure.
-// Mostly to avoid needing to import slog, but also to offer a few tweaked behaviors, logf repackages Attr constructors.
+// For convenience, logf aliases or reimplements some [slog.Attr]-forming functions.
 func Example_structure() {
 	log := logf.New().
 		Colors(false).
@@ -223,8 +246,12 @@ func Example_structure() {
 		ForceTTY().
 		Logger()
 
+	// logf.Attr <=> slog.Attr
+	// (likewise for logf.Value)
+	var files logf.Attr
+
 	// KV <=> slog.Any
-	files := logf.KV("files", "X")
+	files = logf.KV("files", "X")
 
 	// Attrs builds a slice of attrs, munging arguments
 	mulder := logf.Attrs(
@@ -239,20 +266,12 @@ func Example_structure() {
 	log = log.With(agent)
 	log.Info("The Truth Is Out There")
 
-	// A Logger is a LogValuer, and the value is a slog.Group
-	print := logf.New().
-		Colors(false).
-		ForceTTY().
-		Printer()
-	print.Info(logf.Fmt("{}", log))
-
 	// Output:
 	// The Truth Is Out There	agent:{files:X title:Special Agent name:Fox Mulder}
-	// [agent=[files=X title=Special Agent name=Fox Mulder]]
 }
 
-// With a logf.Logger and interpolation, there are a variety of ways to handle an error
-func Example_wrapErr() {
+// Logging, wrapping, and bubbling errors are all possible
+func ExampleWrapErr() {
 	log := logf.New().
 		Colors(false).
 		Layout("message", "\t", "attrs").
@@ -294,36 +313,26 @@ func Example_wrapErr() {
 
 func ExampleConfig_Layout() {
 	log := logf.New().
-		Colors(false).
-		Layout("attrs", "message").
 		ForceTTY().
-		Logger()
+		Layout("level", "attrs", "message", "tag", "\n", "source").
+		Level(logf.LevelBar).
+		Source("", logf.SourcePkg).
+		AddSource(true).
+		Colors(false).
+		Logger().
+		Tag("rightTag")
 
-	log.Info("Hello!", "left", "here")
+	log.Info("Hello!", "leftAttr", "here")
 
 	// Output:
-	// left:here Hello!
-}
-
-func Example_fmt() {
-	log := logf.New().
-		Colors(false).
-		ForceTTY().
-		Printer()
-
-	log = log.With("flavor", "coconut")
-
-	msg := logf.Fmt("{flavor} pie", log)
-	fmt.Println("msg:", msg)
-
-	// Output:
-	// msg: coconut pie
+	// ▕▎ leftAttr:here Hello! rightTag
+	// 	logf
 }
 
 func ExampleLogger_WrapErr() {
 	log := logf.New().
-		Colors(false).
 		ForceTTY().
+		Colors(false).
 		Printer()
 
 	log = log.With("flavor", "coconut")

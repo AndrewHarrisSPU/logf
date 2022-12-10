@@ -285,10 +285,10 @@ func (cfg *Config) AddSource(toggle bool) *Config {
 // Log fields:
 //   - "time"
 //   - "level"
-//   - "message"
-//   - "attrs"
-//   - "tags"
-//   - "source"
+//   - "message" (alt "msg")
+//   - "attrs" (alt "attr")
+//   - "tags" (alt "tag")
+//   - "source" (alt "src")
 //
 // Spacing:
 //   - "\n" (results in a newline, followed by a tab)
@@ -312,13 +312,13 @@ func (cfg *Config) Layout(fields ...string) *Config {
 			f = ttyTimeField
 		case "level":
 			f = ttyLevelField
-		case "message":
+		case "msg", "message":
 			f = ttyMessageField
-		case "attrs":
+		case "attr", "attrs":
 			f = ttyAttrsField
-		case "tags":
+		case "tag", "tags":
 			f = ttyTagsField
-		case "source":
+		case "src", "source":
 			f = ttySourceField
 		default:
 			continue

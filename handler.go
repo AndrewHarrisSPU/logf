@@ -12,7 +12,7 @@ import (
 type handler interface {
 	slog.Handler
 	slog.LogValuer
-	Grouper
+	group() Attr
 	withTag(string) handler
 }
 
@@ -30,15 +30,12 @@ type Handler struct {
 
 // A Grouper is like [slog.LogValuer] in that a Grouper produces structure when expanded.
 // Unlike a [slog.LogValuer] that expands to a group of [Attr]s, the key associated with a Grouper is set by the Grouper.
-type Grouper interface {
-	Group() Attr
+type loggingValuer interface {
+	group() Attr
 }
 
-// Group satisfies the [Grouper] interface.
-// The returned [Attr]'s key is the [Handler]'s tag.
-// The returned [Attr]'s value is the group of attributes set on the [Handler].
-func (h *Handler) Group() Attr {
-	return slog.Group(h.tag.Value.String(), h.attrs...)
+func (h *Handler) group() Attr {
+	return slog.Group("", h.attrs...)
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].

@@ -12,6 +12,7 @@
 |`attrs.go`| procuring and munging attrs |
 |`config.go`| configuration, from `New` |
 |`encoder.go`| TTY encoding logic |
+|`fmt.go`| package-level formatting functions |
 |`handler.go`| Handler |
 |`interpolate.go`| splicer interpolation routines |
 |`logger.go`| Logger |

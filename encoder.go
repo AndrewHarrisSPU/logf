@@ -177,6 +177,12 @@ func (tty *TTY) encAttr(b *Buffer, scope string, a Attr) {
 		return
 	}
 
+	if a.Value.Kind() == slog.LogValuerKind {
+		if lv, ok := a.Value.Any().(slog.LogValuer); ok {
+			a.Value = lv.LogValue().Resolve()
+		}
+	}
+
 	if a.Value.Kind() == slog.GroupKind {
 		tty.encAttrGroup(b, scope, a)
 		return

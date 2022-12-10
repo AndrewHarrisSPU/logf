@@ -107,11 +107,8 @@ func (tty *TTY) Logger() Logger {
 	return newLogger(tty)
 }
 
-// Group satisfies the [Grouper] interface.
-// The returned [Attr]'s key is the [TTY]'s tag.
-// The returned [Attr]'s value is the group of attributes set on the [TTY].
-func (tty *TTY) Group() Attr {
-	return slog.Group(tty.tag.Value.String(), tty.attrs...)
+func (tty *TTY) group() Attr {
+	return slog.Group("", tty.attrs...)
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].

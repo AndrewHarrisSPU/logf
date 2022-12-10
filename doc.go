@@ -82,5 +82,12 @@ A package [testlog] is also included in logf.
 It's offered more in the sense of "this is possible" rather than "this should be used".
 
 # Examples
+
+Note: in examples, some boilereplate is used to trim example output:
+
+	log := log.New().
+		Colors(false).		// turns off colors
+		ForceTTY(true).		// forces TTY output, even though Example output doesn't write to a terminal
+		Printer()		// elides some slog Record fields
 */
 package logf

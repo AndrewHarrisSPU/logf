@@ -10,15 +10,14 @@ func KV(key string, value any) Attr {
 	return slog.Any(key, value)
 }
 
-// Group constructs a composite Attr from a name and a list of Attrs.
 // See [slog.Group].
 func Group(name string, as []Attr) Attr {
 	return slog.Group(name, as...)
 }
 
 // See [slog.GroupValue]
-func GroupValue(as []Attr) Value {
-	return slog.GroupValue(as...)
+func GroupValue(args ...any) Value {
+	return slog.GroupValue(Attrs(args...)...)
 }
 
 func parseAttrs(args []any) (as []Attr) {
@@ -106,18 +105,14 @@ func Attrs(args ...any) (as []Attr) {
 			args = args[1:]
 
 		case *slog.Logger:
-			if g, ok := arg.Handler().(Grouper); ok {
-				as = append(as, g.Group())
-			} else if lv, ok := arg.Handler().(slog.LogValuer); ok {
-				expandValuer(&as, "", lv)
+			if h, ok := arg.Handler().(handler); ok {
+				as = append(as, h.group())
 			}
 			args = args[1:]
 
 		case Logger:
-			if g, ok := arg.Handler().(Grouper); ok {
-				as = append(as, g.Group())
-			} else if lv, ok := arg.Handler().(slog.LogValuer); ok {
-				expandValuer(&as, "", lv)
+			if h, ok := arg.Handler().(handler); ok {
+				as = append(as, h.group())
 			}
 			args = args[1:]
 
