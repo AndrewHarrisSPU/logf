@@ -1,5 +1,7 @@
 # logf
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/AndrewHarrisSPU/logf.svg)](https://pkg.go.dev/github.com/AndrewHarrisSPU/logf)
+
 ## Current status:
 
 Core functionality seems complete.
