@@ -18,7 +18,7 @@ Work in progress!
 
 	func main() {
 		log := logf.New().Logger()
-		log.Msg("Hello, Roswell")
+		log.Info("Hello, Roswell")
 	}
 
 # Interpolation
@@ -26,11 +26,16 @@ Work in progress!
 Generating output similar to the earlier Hello, world progam:
 
 	log = log.With("place", "Roswell")
-	log.Msgf("Hello, {place}")
+	log.Infof("Hello, {place}")
 
-Generating a wrapped error with the error string "Roswell: 🛸 spotted":
+Reporting a UFO sighting:
+	ufo := errors.New("🛸 spotted")
+	log.Errorf("{place}", ufo)
 
-	err := log.NewErr("{place}", errors.New("🛸 spotted"))
+Generating a wrapped error:
+
+	ufo := errors.New("🛸 spotted")
+	err := log.WrapErr("{place}", errors.New("🛸 spotted"))
 
 # TTY
 
@@ -40,10 +45,6 @@ It pretty-prints lines like:
 	▎ 15:04:05 message   key:value
 
 Various layout and formatting details are configurable.
-
-As an alternative or an auxilliary mode to key:value pairs, a [TTY] also prints tags.
-
-# Tags
 
 A [TTY] can display tags set with [Logger.Tag] or detected by configuration ([Config.Tag] or [Config.TagEncode]).
 Tags can be alternative or auxilliary to long strings of attributes.
@@ -55,18 +56,23 @@ A [logf.Logger] can be built from a [slog.Handler], and a [logf.Handler] is a va
 
 Example usage:
 
-Construct a [Logger], given a [slog.Handler]:
+Construct a [Logger], which is in 
+	log := logf.New().Logger()
 
-	log := logf.UsingHandler(h)
-
-Construct a [Logger], given a [context.Context]
-
-	log := logf.FromContext(ctx)
+The resulting logger is based on a [TTY] if standard output is a terminal.
+Otherwise, the logger is based on a [slog.JSONHandler].
 
 Passing a [TTY]:
 
 	tty := logf.New().TTY()
 	slog.New(tty)
+
+Construct a [Logger], given a [slog.Handler]:
+
+	log := logf.UsingHandler(h)
+
+The resulting logger may be unable interpolate over any attrbiutes set on a non-logf-Handler.
+In general, effort is made via type assertions to recover logf types, but recovery isn't always possible.
 
 # testlog
 

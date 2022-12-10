@@ -15,13 +15,11 @@ var missingMatch = slog.StringValue(`!missing-match`)
 func (s *splicer) scanMessage(msg string) (unkeyed int) {
 	var clip string
 	var found bool
-	s.interpolates = false
 	for {
 		msg, clip, found = scanNext(msg)
 		if !found {
 			break
 		}
-		s.interpolates = true
 
 		key := s.scanClip(clip)
 		if len(key) > 0 {
@@ -124,11 +122,6 @@ func (s *splicer) scanUnescapeKey(key string) string {
 // INTERPOLATE
 
 func (s *splicer) ipol(msg string) {
-	if !s.interpolates {
-		s.WriteString(msg)
-		return
-	}
-
 	var clip []byte
 	var found bool
 	for {

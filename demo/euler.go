@@ -25,9 +25,9 @@ func (g gopher) add(ns <-chan int, sums chan<- int) {
 	go func() {
 		for n := range ns {
 			g.sum += n
-			g.log.Debug("{id}: {sum}", "sum", g.sum)
+			g.log.Debugf("{id}: {sum}", "sum", g.sum)
 		}
-		g.log.Info("{id} done")
+		g.log.Infof("{id} done")
 		sums <- g.sum
 	}()
 }
@@ -42,7 +42,6 @@ func main() {
 
 	tty := logf.New().
 		Ref(logf.DEBUG).
-		// Layout( "level", "tags", "message", "attrs").
 		TTY()
 
 	log := tty.

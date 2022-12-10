@@ -54,7 +54,7 @@ func writerIsTerminal(w io.Writer) bool {
 //   - [Config.Message]: ""
 //   - [Config.Source]: "dim", SourceAbs
 //   - [Config.Tag]: "#", "bright magenta"
-//   - [Config.TagEncoce]: nil
+//   - [Config.TagEncode]: nil
 //   - [Config.Time]: "dim", TimeShort
 //   - [Config.Colors]: true
 //
@@ -412,19 +412,18 @@ func (cfg *Config) ForceTTY() *Config {
 // If the configured Writer is a terminal, the returned [*Logger] is [TTY]-based
 // Otherwise, the returned [*Logger] a JSONHandler]-based
 func (cfg *Config) Logger() Logger {
-	return cfg.
-		TTY().
-		Logger()
+	tty := cfg.TTY()
+	return newLogger(tty)
 }
 
 // Printer returns a [TTY]-based Logger that only emits tags and messages.
 // If the configured Writer is a terminal, the returned [Logger] is [TTY]-based
 // Otherwise, the returned [Logger] a JSONHandler]-based
 func (cfg *Config) Printer() Logger {
-	return cfg.
+	tty := cfg.
 		Layout("tags", "message").
-		TTY().
-		Logger()
+		TTY()
+	return newLogger(tty)
 }
 
 // JSON returns a Logger using a [slog.JSONHandler] for encoding.
@@ -437,15 +436,6 @@ func (cfg *Config) JSON() Logger {
 		ReplaceAttr: cfg.replace,
 	}.NewJSONHandler(cfg.w)
 
-	// return Logger{
-	// 	h: &Handler{
-	// 		tag:       slog.String("", ""),
-	// 		enc:       enc,
-	// 		addSource: cfg.fmtr.addSource,
-	// 		replace:   cfg.replace,
-	// 	},
-	// }
-
 	h := &Handler{
 		tag:       slog.String("", ""),
 		enc:       enc,
@@ -453,7 +443,8 @@ func (cfg *Config) JSON() Logger {
 		replace:   cfg.replace,
 	}
 
-	return Logger{slog.New(h), h}
+	return newLogger(h)
+	// return Logger{slog.New(h), h}
 }
 
 // Text returns a Logger using a [slog.TextHandler] for encoding.
@@ -466,15 +457,6 @@ func (cfg *Config) Text() Logger {
 		ReplaceAttr: cfg.replace,
 	}.NewTextHandler(cfg.w)
 
-	// return Logger{
-	// 	h: &Handler{
-	// 		tag:       slog.String("", ""),
-	// 		enc:       enc,
-	// 		addSource: cfg.fmtr.addSource,
-	// 		replace:   cfg.replace,
-	// 	},
-	// }
-
 	h := &Handler{
 		tag:       slog.String("", ""),
 		enc:       enc,
@@ -482,5 +464,6 @@ func (cfg *Config) Text() Logger {
 		replace:   cfg.replace,
 	}
 
-	return Logger{slog.New(h), h}
+	return newLogger(h)
+	// return Logger{slog.New(h), h}
 }

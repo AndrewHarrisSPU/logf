@@ -34,16 +34,16 @@ func TestTTY(t *testing.T) {
 
 	log().Info("ok")
 
-	log1 := log().Group("l1")
+	log1 := log().WithGroup("l1")
 	log1.Info("ok")
 
 	log2 := log1.With("a1", 1)
 	log2.Info("ok")
 
-	log3 := log().Group("l2").With("a2", 2)
+	log3 := log().WithGroup("l2").With("a2", 2)
 	log3.Warn("ok")
 
-	log4 := log().Group("l3").With("a3", 3)
+	log4 := log().WithGroup("l3").With("a3", 3)
 
 	log1.Debug("ok")
 	log2.Info("ok")
@@ -88,7 +88,7 @@ func TestTTYLogValuer(t *testing.T) {
 		}.LogValue(),
 	}
 
-	log.Info("{lm.key2.key1nested}", "lm", lm.LogValue())
+	log.Infof("{lm.key2.key1nested}", "lm", lm.LogValue())
 
 	if buf.String() != testTTYLogValuerOutput {
 		t.Log(buf.String())
@@ -125,10 +125,10 @@ func TestTTYReplace(t *testing.T) {
 
 	log = log.With("secret", 1)
 
-	log.Info("{secret}", "secret", 2)
+	log.Infof("{secret}", "secret", 2)
 	want(`redacted   secret:redacted secret:redacted`)
 
-	log.Info("{group.secret}, {group.group2.secret}", Group("group", Attrs(
+	log.Infof("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
 		Group("group2", Attrs(
 			KV("secret", 4),

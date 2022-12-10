@@ -19,7 +19,7 @@ const (
 	missingRightBracket = "!missing-right-bracket"
 )
 
-var missingAttrValue = slog.StringValue("!missing-attr")
+var missingAttrValue = slog.StringValue("!missing-attr-value")
 
 // LIFECYCLE
 
@@ -54,11 +54,7 @@ type splicer struct {
 	export []Attr
 
 	// holds number of unkeyed attrs
-	nUnkeyed int
 	iUnkeyed int
-
-	// false if scanning indicates no interpolation
-	interpolates bool
 }
 
 func newSplicer() *splicer {
@@ -109,7 +105,6 @@ func (s *splicer) clear() {
 	}
 
 	s.iUnkeyed = 0
-	s.interpolates = false
 }
 
 // return spliced text
@@ -117,32 +112,42 @@ func (s *splicer) line() string {
 	return string(s.text)
 }
 
-// JOIN / MATCH
-
-func (s *splicer) joinAttrList(as []Attr) {
-	for _, a := range as {
-		s.export = append(s.export, a)
+// used for adding Record attrs
+func (s *splicer) addAttr(a Attr, replace func(Attr) Attr) {
+	if replace != nil {
+		a = replace(a)
 	}
-}
-
-func (s *splicer) joinList(args []any) {
-	for len(args) > 0 {
-		args = parseAttr(&s.export, args)
-	}
-}
-
-// used for joining Record attrs
-func (s *splicer) joinOne(a Attr) {
 	s.export = append(s.export, a)
 }
 
-func (s *splicer) matchAll(scope string, as []Attr, replace func(Attr) Attr) {
+// JOIN / MATCH
+
+func (s *splicer) joinAttrs(as []Attr, scope string, replace func(Attr) Attr) {
 	for _, a := range as {
-		s.match(scope, a, replace)
+		s.join(a, scope, replace)
 	}
-	for _, a := range s.export {
-		s.match(scope, a, replace)
+}
+
+func (s *splicer) joinArgs(args []any, scope string, replace func(Attr) Attr) {
+	pos := len(s.export)
+	for len(args) > 0 {
+		args = parseAttr(&s.export, args)
 	}
+	for _, a := range s.export[pos:] {
+		s.join(a, scope, replace)
+	}
+}
+
+func (s *splicer) joinOne(a Attr, scope string, replace func(Attr) Attr) {
+	s.export = append(s.export, a)
+	s.join(a, scope, replace)
+}
+
+func (s *splicer) join(a Attr, scope string, replace func(Attr) Attr) {
+	if replace != nil {
+		a = replace(a)
+	}
+	s.match(scope, a, replace)
 }
 
 // root of matching invocation
@@ -151,33 +156,27 @@ func (s *splicer) matchAll(scope string, as []Attr, replace func(Attr) Attr) {
 func (s *splicer) match(scope string, a Attr, replace func(Attr) Attr) {
 	// match if raw attr key is found in dictionary
 	if _, found := s.dict[a.Key]; found {
-		if replace != nil {
-			a = replace(a)
-		}
 		s.dict[a.Key] = a.Value
 		return
 	}
 
 	// match if given prefix + attr key is found in dictionary
 	if _, found := s.dict[scope+a.Key]; found {
-		if replace != nil {
-			a = replace(a)
-		}
 		s.dict[scope+a.Key] = a.Value
 		return
 	}
 
 	// if lv, ok := a.Value.Any().(slog.LogValuer); ok {
-	// v := lv.LogValue().Resolve()
-	// if v.Kind() == slog.GroupKind {
-	// 	gpos := len(s.scratch)
-	// 	s.scratch = append(s.scratch, a.Key...)
-	// 	s.scratch = append(s.scratch, '.')
+	// 	v := lv.LogValue().Resolve()
+	// 	if v.Kind() == slog.GroupKind {
+	// 		gpos := len(s.scratch)
+	// 		s.scratch = append(s.scratch, a.Key...)
+	// 		s.scratch = append(s.scratch, '.')
 
-	// 	s.matchRec(v.Group(), gpos, replace)
+	// 		s.matchRec(v.Group(), gpos, replace)
 
-	// 	s.scratch = s.scratch[:gpos]
-	// }
+	// 		s.scratch = s.scratch[:gpos]
+	// 	}
 	// 	return
 	// }
 
@@ -185,9 +184,11 @@ func (s *splicer) match(scope string, a Attr, replace func(Attr) Attr) {
 		// store a marker that deliminates s.scratch state before subsequent matchRec operations
 		gpos := len(s.scratch)
 
-		// push attr key
-		s.scratch = append(s.scratch, a.Key...)
-		s.scratch = append(s.scratch, '.')
+		if len(a.Key) > 0 {
+			// push attr key
+			s.scratch = append(s.scratch, a.Key...)
+			s.scratch = append(s.scratch, '.')
+		}
 
 		s.matchRec(a.Value.Group(), gpos, replace)
 
