@@ -22,7 +22,8 @@ import (
 //
 //	go run demo/<some demo file>.go
 type TTY struct {
-	fmtr *ttyFormatter
+	fmtr   *ttyFormatter
+	bypass slog.Handler
 
 	// group
 	scope   string
@@ -40,7 +41,7 @@ type TTY struct {
 	tagSep  byte
 }
 
-// ttyEncoder manages state relevant to encoding a record to bytes
+// ttyFormatter manages state relevant to encoding a record to bytes
 type ttyFormatter struct {
 	sink   *ttySink
 	layout []ttyField
@@ -64,7 +65,7 @@ type ttyFormatter struct {
 	addSource bool
 }
 
-// ttySink manages state relevant to writing bytes on-screen (or wherever)
+// ttySink manages state relevant to writing bytes, concurrently, on-screen (or wherever)
 type ttySink struct {
 	w       io.Writer
 	ref     slog.Leveler
@@ -85,10 +86,12 @@ func (tty *TTY) bounceJSON() Logger {
 
 	log := cfg.JSON()
 
-	log.With(tty.attrs)
+	if len(tty.attrs) > 0 {
+		log = log.With(tty.attrs)
+	}
 	if tty.scope != "" {
 		for _, name := range strings.Split(tty.scope, ".") {
-			log.Group(name)
+			log = log.WithGroup(name)
 		}
 	}
 
@@ -101,7 +104,14 @@ func (tty *TTY) Logger() Logger {
 		return tty.bounceJSON()
 	}
 
-	return Logger{slog.New(tty), tty} // h: tty}
+	return newLogger(tty)
+}
+
+// Group satisfies the [Grouper] interface.
+// The returned [Attr]'s key is the [TTY]'s tag.
+// The returned [Attr]'s value is the group of attributes set on the [TTY].
+func (tty *TTY) Group() Attr {
+	return slog.Group(tty.tag.Value.String(), tty.attrs...)
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].
@@ -135,6 +145,7 @@ func (tty *TTY) Enabled(level slog.Level) bool {
 // See [slog.WithAttrs].
 func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 	t2 := *tty
+	t2.bypass = tty.bypass.WithAttrs(as)
 
 	// attr copy & extend
 	scoped := scopeAttrs(t2.scope, as, t2.fmtr.sink.replace)
@@ -177,6 +188,7 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 // See [slog.Handler.WithGroup].
 func (tty *TTY) WithGroup(name string) slog.Handler {
 	t2 := *tty
+	t2.bypass = tty.bypass.WithGroup(name)
 	t2.openKey = name
 	t2.nOpen = tty.nOpen + 1
 	t2.scope = tty.scope + name + "."
@@ -193,21 +205,23 @@ func (tty *TTY) withTag(tag string) handler {
 
 // Handle logs the given [slog.Record] to [TTY] output.
 func (tty *TTY) Handle(r slog.Record) error {
+	if !tty.fmtr.sink.enabled {
+		tty.bypass.Handle(r)
+		return nil
+	}
+
 	s := newSplicer()
 	defer s.free()
 
 	var err error
 	r.Attrs(func(a Attr) {
-		s.joinOne(a)
+		s.addAttr(a, tty.fmtr.sink.replace)
 		if a.Key == "err" {
 			if curr, isErr := a.Value.Any().(error); isErr {
 				err = curr
 			}
 		}
 	})
-
-	s.scanMessage(r.Message)
-	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
 
 	file, line := r.SourceLine()
 	tty.encFields(s, r.Level, r.Message, err, SourceLine{file, line})
@@ -218,41 +232,4 @@ func (tty *TTY) Handle(r slog.Record) error {
 	tty.fmtr.sink.w.Write(s.text)
 
 	return nil
-}
-
-func (tty *TTY) handle(
-	s *splicer,
-	level slog.Level,
-	msg string,
-	err error,
-	depth int,
-	args []any,
-) error {
-	defer s.free()
-
-	s.joinList(args)
-	s.scanMessage(msg)
-	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
-
-	src := tty.yankSourceLine(depth)
-
-	tty.encFields(s, level, msg, err, src)
-
-	tty.fmtr.sink.mu.Lock()
-	defer tty.fmtr.sink.mu.Unlock()
-
-	tty.fmtr.sink.w.Write(s.text)
-
-	return nil
-}
-
-func (tty *TTY) fmt(msg string, args []any) *splicer {
-	s := newSplicer()
-
-	s.joinList(args)
-	s.scanMessage(msg)
-	s.matchAll(tty.scope, tty.attrs, tty.fmtr.sink.replace)
-	s.ipol(msg)
-
-	return s
 }

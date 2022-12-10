@@ -20,9 +20,7 @@ func main() {
 		Time("dim", logf.TimeShort).
 		Source("dim", logf.SourceShort).
 		Tag("place", "cyan").
-		// 	logf.Tag( "place", "bright blue" ),
-		// 	logf.Styler("i", "magenta", "bright magenta"),
-		// ).
+		Tag("i", "bright magenta").
 		TTY()
 
 	slog.SetDefault(slog.New(tty.WithAttrs(logf.Attrs(
@@ -52,17 +50,18 @@ func deadline(ctx context.Context) {
 }
 
 func ping(ctx context.Context, wg *sync.WaitGroup, level slog.Level, interval int) {
-	log := slog.FromContext(ctx)
+	log := logf.FromContext(ctx)
+
 	d := time.Duration(interval)
 	tick := time.NewTicker(d * time.Millisecond).C
 	i := 0
 	for {
 		select {
 		case <-tick:
-			log.Log(level, "Hello, {place}", "i", i)
+			log.Log(level, "tick", "i", i)
 			i++
 		case <-ctx.Done():
-			log.Log(1, "goodbye {level} ticks", "i", i, "level", level)
+			log.Log(1, "bye!", "i", i)
 			wg.Done()
 			return
 		}

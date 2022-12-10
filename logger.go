@@ -2,15 +2,49 @@ package logf
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"golang.org/x/exp/slog"
 )
 
+// Logger embeds a [slog.Logger], and offers additional formatting methods:
+//   - Leveled / formatting: [Logger.Debugf], [Logger.Infof], [Logger.Warnf], [Logger.Errorf]
+//   - Formatting to a string or an error: [Logger.Fmt], [Logger.WrapErr]
+//   - Logger tagging: [Logger.Tag]
+//
+// The following methods are available on a Logger by way of embedding:
+//   - Leveled logging methods: [slog.Logger.Debug], [slog.Logger.Info], [slog.Logger.Warn], [slog.Logger.Error]
+//   - General logging methods: [slog.Logger.Log], [slog.Logger.LogAttrs], [slog.Logger.LogDepth], [slog.Logger.LogAttrsDepth]
+//   - [slog.Logger.Handler]
+//
+// The following methds are overriden to return [Logger]s rather than [*slog.Logger]s:
+//   - [slog.Logger.Ctx]
+//   - [slog.Logger.FromContext]
+//   - [slog.Logger.With]
+//   - [slog.Logger.WithContext]
+//   - [slog.Logger.WithGroup]
 type Logger struct {
 	*slog.Logger
-	h handler
+}
+
+// UsingHandler returns a Logger employing the given slog.Handler
+//
+// If the given handler is not of a type native to logf, a new [Handler] is constructed, encapsulating the given handler.
+func UsingHandler(h slog.Handler) Logger {
+	if h, isLogfHandler := h.(handler); isLogfHandler {
+		return newLogger(h)
+	}
+
+	lh := &Handler{
+		enc:       h,
+		addSource: true,
+	}
+
+	return newLogger(lh)
+}
+
+// Ctx returns FromContext(ctx).WithContext(ctx), with logf flavors.
+func Ctx(ctx context.Context) Logger {
+	return FromContext(ctx).WithContext(ctx)
 }
 
 // FromContext employs [slog.FromContext] to obtain a Logger from the given context.
@@ -21,156 +55,74 @@ func FromContext(ctx context.Context) Logger {
 	return UsingHandler(slog.FromContext(ctx).Handler())
 }
 
-// UsingHandler returns a Logger employing the given slog.Handler
-//
-// If the given handler is not of a type native to logf, a new [Handler] is constructed, encapsulating the given handler.
-func UsingHandler(h slog.Handler) Logger {
-	if h, isLogfHandler := h.(handler); isLogfHandler {
-		return Logger{slog.New(h), h}
-	}
-
-	lh := &Handler{
-		enc:       h,
-		addSource: true,
-	}
-
-	return newLogger(lh)
-
-	// if h, isLogfHandler := h.(handler); isLogfHandler {
-	// 	return Logger{h: h}
-	// }
-
-	// return Logger{
-	// 	h: &Handler{
-	// 		enc:       h,
-	// 		addSource: true,
-	// 	},
-	// }
-}
-
 func newLogger(h handler) Logger {
-	return Logger{slog.New(h), h}
+	return Logger{slog.New(h)}
 }
 
-// With appends attributes held in a [Logger]'s handler.
-// Arguments are converted to attributes with [Attrs].
+// See [slog.Logger.With]
 func (l Logger) With(args ...any) Logger {
-	h := l.h.WithAttrs(parseAttrs(args)).(handler)
-	return newLogger(h)
+	return Logger{
+		l.Logger.With(args...),
+	}
 }
 
-// Group calls [slog.Logger.WithGroup] on a [Logger]'s handler.
-func (l Logger) Group(name string) Logger {
-	h := l.h.WithGroup(name).(handler)
-	return newLogger(h)
+// See [slog.Logger.WithGroup]
+func (l Logger) WithGroup(name string) Logger {
+	return Logger{
+		l.Logger.WithGroup(name),
+	}
 }
 
-// Tag configures a tag that appears in [TTY] log output.
-// Tags set by this method override; only one is set per logger.
-func (l Logger) Tag(tag string) Logger {
-	h := l.h.withTag(tag)
-	return newLogger(h)
+// See [slog.Logger.WithContext]
+func (l Logger) WithContext(ctx context.Context) Logger {
+	return Logger{
+		l.Logger.WithContext(ctx),
+	}
 }
 
-// Handler returns a handler associated with the Logger.
-func (l Logger) Handler() slog.Handler {
-	return l.h
-}
-
-// LogValue returns the set of [Attr]s accrued by the Logger's handler.
-func (l Logger) LogValue() slog.Value {
-	return l.h.LogValue()
-}
-
-// LOGGING METHODS
-/*
-func (l Logger) Log(level slog.Level, msg string, args ...any){
-	if !l.h.Enabled(level) {
-		return
+// Tag sets a unique tag on the returned Logger.
+// Unlike attributes set with [Logger.With], only one tag set by [Tag] appears in output.
+func (l Logger) Tag(name string) Logger {
+	h, ok := l.Handler().(handler)
+	if !ok {
+		return l
 	}
 
-	s := newSplicer()
-
-	l.h.handle(s, level, msg, nil, 0, args)
+	return newLogger(h.withTag(name))
 }
 
-func (l Logger) Debug(msg string, args ...any) {
-	if !l.h.Enabled(DEBUG) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, DEBUG, msg, nil, 0, args)
+// Debugf interpolates the msg string and logs at DEBUG.
+func (l Logger) Debugf(msg string, args ...any) {
+	msg = logFmt(l, msg, args)
+	l.Debug(msg, args...)
 }
 
-// Info performs interpolation on the given message string, and logs.
-func (l Logger) Info(msg string, args ...any) {
-	if !l.h.Enabled(INFO) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, INFO, msg, nil, 0, args)
+// Infof interpolates the msg string and logs at INFO.
+func (l Logger) Infof(msg string, args ...any) {
+	msg = logFmt(l, msg, args)
+	l.Info(msg, args...)
 }
 
-func (l Logger) Warn(msg string, args ...any) {
-	if !l.h.Enabled(WARN) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, WARN, msg, nil, 0, args)
+// Warnf interpolates the msg string and logs at WARN.
+func (l Logger) Warnf(msg string, args ...any) {
+	msg = logFmt(l, msg, args)
+	l.Warn(msg, args...)
 }
 
-func (l Logger) Error(msg string, err error, args ...any) {
-	if !l.h.Enabled(ERROR) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, ERROR, msg, err, 0, args)
+// Errorf interpolates the msg string and logs at ERROR.
+func (l Logger) Errorf(msg string, err error, args ...any) {
+	err = logFmtErr(l, msg, err, args)
+	l.Error("", err, args...)
 }
 
-func (l Logger) LogDepth(depth int, level slog.Level, msg string, args ...any){
-	if !l.h.Enabled(level) {
-		return
-	}
-
-	s := newSplicer()
-
-	l.h.handle(s, level, msg, nil, depth, args)
-}
-*/
-// Fmt applies interpolation to the given message string.
-// The resulting string is returned, rather than logged.
-func (l Logger) Fmt(msg string, args ...any) string {
-	s := l.h.fmt(msg, args)
-	// s := l.h.fmt(msg, args)
-	defer s.free()
-
-	return s.line()
+// Fmt interpolates the f string and returns the result.
+func (l Logger) Fmt(f string, args ...any) string {
+	return logFmt(l, f, args)
 }
 
-// NewErr applies interpolation and formatting to wrap an error.
-// If the given err is nil, a new error is constructed.
-// The resulting error is returned, rather than logged.
-func (l Logger) NewErr(msg string, err error, args ...any) error {
-	s := l.h.fmt(msg, args)
-
-	// s := l.h.fmt(msg, args)
-	defer s.free()
-
-	if err == nil {
-		return errors.New(s.line())
-	}
-
-	if len(s.text) > 0 {
-		s.WriteString(": ")
-	}
-	s.WriteString("%w")
-	return fmt.Errorf(s.line(), err)
+// WrapErr interpolates the f string, and returns an error.
+// If geven a nil error, the resulting error.Error() string is the result of interpolating f.
+// If given a non-nil error, the result includes the given error's string, and matches [errors.Is]/[errors.As] behavior, as with [fmt.Errorf]
+func (l Logger) WrapErr(f string, err error, args ...any) error {
+	return logFmtErr(l, f, err, args)
 }

@@ -12,9 +12,8 @@ import (
 type handler interface {
 	slog.Handler
 	slog.LogValuer
+	Grouper
 	withTag(string) handler
-	fmt(string, []any) *splicer
-	// handle(*splicer, slog.Level, string, error, int, []any) error
 }
 
 // Handler encapsulates a [slog.Handler] and maintains additional state required for message interpolation.
@@ -27,6 +26,19 @@ type Handler struct {
 
 	replace   func(Attr) Attr
 	addSource bool
+}
+
+// A Grouper is like [slog.LogValuer] in that a Grouper produces structure when expanded.
+// Unlike a [slog.LogValuer] that expands to a group of [Attr]s, the key associated with a Grouper is set by the Grouper.
+type Grouper interface {
+	Group() Attr
+}
+
+// Group satisfies the [Grouper] interface.
+// The returned [Attr]'s key is the [Handler]'s tag.
+// The returned [Attr]'s value is the group of attributes set on the [Handler].
+func (h *Handler) Group() Attr {
+	return slog.Group(h.tag.Value.String(), h.attrs...)
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].
@@ -82,70 +94,6 @@ func (h *Handler) withTag(tag string) handler {
 	}
 }
 
-// Handle performs interpolation on a [slog.Record] message.
-// The record is then handled by an encapsulated [slog.Handler].
 func (h *Handler) Handle(r slog.Record) error {
-	s := newSplicer()
-	defer s.free()
-
-	r.Attrs(func(a Attr) {
-		s.joinOne(a)
-	})
-
-	s.scanMessage(r.Message)
-
-	if s.interpolates {
-		s.matchAll(h.scope, h.attrs, h.replace)
-		s.ipol(r.Message)
-		r.Message = s.line()
-	}
-
 	return h.enc.Handle(r)
-}
-
-func (h *Handler) handle(
-	s *splicer,
-	level slog.Level,
-	msg string,
-	err error,
-	depth int,
-	args []any,
-) error {
-	// defer s.free()
-
-	// if h.tag.Key != "" {
-	// 	s.joinOne(h.tag)
-	// }
-
-	// s.joinList(args)
-	// s.scanMessage(msg)
-	// s.matchAll(h.scope, h.attrs, h.replace)
-
-	// s.ipol(msg)
-	// if err != nil {
-	// 	s.writeError(len(msg), err)
-	// }
-
-	// if h.addSource {
-	// 	depth += 4
-	// } else {
-	// 	depth = 0
-	// }
-
-	// r := slog.NewRecord(time.Now(), level, msg, depth, nil)
-	// r.AddAttrs(s.export...)
-
-	// return h.enc.Handle(r)
-	return nil
-}
-
-func (h *Handler) fmt(msg string, args []any) *splicer {
-	s := newSplicer()
-
-	s.joinList(args)
-	s.scanMessage(msg)
-	s.matchAll(h.scope, h.attrs, h.replace)
-	s.ipol(msg)
-
-	return s
 }

@@ -64,7 +64,7 @@ func (b *Buffer) writeSep() {
 	case '\n':
 		b.WriteByte('\n')
 	case '\t':
-		b.WriteString(sepstring[:tabWidth])
+		b.WriteByte('\t')
 	case '?':
 		b.WriteByte(' ')
 	case '!':
@@ -155,7 +155,7 @@ func (tty *TTY) encMsg(b *Buffer, msg string, err error) {
 	b.writeSep()
 
 	tty.fmtr.message.color.use(b)
-	b.splicer.ipol(msg)
+	b.splicer.WriteString(msg)
 	tty.fmtr.message.color.drop(b)
 
 	// merge error into message
