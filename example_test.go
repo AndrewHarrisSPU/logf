@@ -26,7 +26,7 @@ func ExampleEncoder() {
 
 	// Output:
 	// ▕▎ ??? ...
-	//    example_test.go:25
+	//	example_test.go:25
 }
 
 type mapWithLogValueMethod map[string]any
@@ -175,7 +175,7 @@ func Example_interpolationArgumentsMixed() {
 	log.Infof("{greek}: {}", "pi", 3.14, "greek", "π")
 
 	// Output:
-	// π: 3.14   pi:3.14 greek:π
+	// π: 3.14	pi:3.14 greek:π
 }
 
 // Interpolation of time values in message strings.
@@ -247,7 +247,7 @@ func Example_structure() {
 	print.Info(logf.Fmt("{}", log))
 
 	// Output:
-	// The Truth Is Out There   agent:{files:X title:Special Agent name:Fox Mulder}
+	// The Truth Is Out There	agent:{files:X title:Special Agent name:Fox Mulder}
 	// [agent=[files=X title=Special Agent name=Fox Mulder]]
 }
 
@@ -285,7 +285,7 @@ func Example_wrapErr() {
 	fmt.Println(err4.Error())
 
 	// Output:
-	// the system is down   emails:{user:Strong Bad id:12345 err:the system is down}
+	// the system is down	emails:{user:Strong Bad id:12345 err:the system is down}
 	// the system is down
 	// Strong Bad: the system is down
 	// Strong Bad: the system is down
@@ -403,9 +403,9 @@ func ExampleLogger_WithGroup() {
 	log.Infof("local {outer.inner.local.x}", "x", 3)
 
 	// Output:
-	// outer 1   outer:{x:1 inner: {x:2 x:3}}}
-	// inner 2   outer:{x:1 inner: {x:2 x:3}}}
-	// local 3   outer:{x:1 inner: {x:2 x:3}}}
+	// outer 1	outer:{x:1 inner: {x:2 x:3}}}
+	// inner 2	outer:{x:1 inner: {x:2 x:3}}}
+	// local 3	outer:{x:1 inner: {x:2 x:3}}}
 }
 
 func ExampleLogger_With() {
@@ -422,7 +422,6 @@ func ExampleLogger_With() {
 	// species:gopher
 }
 
-/*
 func ExampleLogger_Tag() {
 	log := logf.New().
 		Colors(false).
@@ -439,4 +438,3 @@ func ExampleLogger_Tag() {
 	// Log-9000 Hi!
 	// Log-9001 Plus one!
 }
-*/

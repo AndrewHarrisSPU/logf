@@ -10,12 +10,12 @@ import (
 
 const testTTYoutput = `   INFO    ok
    INFO    ok
-   INFO    ok   l1:{a1:1}
-   WARN    ok   l2:{a2:2}
+   INFO    ok	l1:{a1:1}
+   WARN    ok	l2:{a2:2}
    DEBUG   ok
-   INFO    ok   l1:{a1:1}
-   WARN    ok   l2:{a2:2}
-   ERROR   ok   l3:{a3:3}
+   INFO    ok	l1:{a1:1}
+   WARN    ok	l2:{a2:2}
+   ERROR   ok	l3:{a3:3}
 `
 
 func TestTTY(t *testing.T) {
@@ -126,7 +126,7 @@ func TestTTYReplace(t *testing.T) {
 	log = log.With("secret", 1)
 
 	log.Infof("{secret}", "secret", 2)
-	want(`redacted   secret:redacted secret:redacted`)
+	want(`redacted	secret:redacted secret:redacted`)
 
 	log.Infof("{group.secret}, {group.group2.secret}", Group("group", Attrs(
 		KV("secret", 3),
@@ -135,5 +135,5 @@ func TestTTYReplace(t *testing.T) {
 			KV("secret", 5),
 		)),
 	)))
-	want(`redacted, redacted   secret:redacted group:{secret:redacted group2:{secret:redacted secret:redacted}}`)
+	want(`redacted, redacted	secret:redacted group:{secret:redacted group2:{secret:redacted secret:redacted}}`)
 }

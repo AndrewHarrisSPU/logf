@@ -36,7 +36,7 @@ func TestEscaping(t *testing.T) {
 		}
 	}
 
-	log := New().JSON()
+	log := New().ForceTTY().Logger()
 
 	want(`{+}`, Fmt(`\{+\}`))
 
@@ -114,7 +114,7 @@ func TestGroups2(t *testing.T) {
 	}
 
 	// one scope
-	log := New().JSON()
+	log := New().ForceTTY().Logger()
 	mulder := log.WithGroup("agent").With("first", "Fox", "last", "Mulder")
 	// mulder.Info("Hi, {agent.last}")
 	want("Hi, Mulder", Fmt("Hi, {agent.last}", mulder))
