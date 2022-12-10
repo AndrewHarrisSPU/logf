@@ -26,9 +26,12 @@ func writerIsTerminal(w io.Writer) bool {
 
 // CONFIG
 
-// Config is a base type for `logf` handler and logger configuration.
+// Config is a base type for [Logger] and [TTY] configuration.
 //
 // To construct a [Logger] with an already extant [slog.Handler], see [UsingHandler].
+//
+// If a [TTY] would employ a Writer that isn't a terminal, Config methods result in a [slog.JSONHandler]-based [Logger],
+// unless [Config.ForceTTY] is set.
 //
 // # Typical usage
 //
@@ -40,23 +43,24 @@ func writerIsTerminal(w io.Writer) bool {
 //   - [Config.Writer]: os.Stdout
 //   - [Config.Ref]: logf.StdRef
 //   - [Config.AddSource]: false
-//   - [Config.Level]: INFO
 //   - [Config.ReplaceFunc]: nil
 //
 // Methods applying only to a [TTY], or a logger based on one, and default arguments:
 //   - [Config.Layout]: "level", "time", "tags", "message", "\t", "attrs"
-//   - [Config.AttrKey]: "dim cyan"
-//   - [Config.AttrValue]: "cyan"
+//   - [Config.Colors]: true
 //   - [Config.ForceTTY]: false
-//   - [Config.Group]: "dim"
+//
+// Methods configured [TTY] encoding:
 //   - [Config.Level]: LevelBar
 //   - [Config.LevelColors]: "bright cyan", "bright green", "bright yellow", "bright red"
-//   - [Config.Message]: ""
-//   - [Config.Source]: "dim", SourceAbs
+//   - [Config.Time]: "dim", TimeShort
 //   - [Config.Tag]: "#", "bright magenta"
 //   - [Config.TagEncode]: nil
-//   - [Config.Time]: "dim", TimeShort
-//   - [Config.Colors]: true
+//   - [Config.Message]: ""
+//   - [Config.AttrKey]: "dim cyan"
+//   - [Config.AttrValue]: "cyan"
+//   - [Config.Group]: "dim"
+//   - [Config.Source]: "dim", SourceAbs
 //
 // 3. A Config method returning a [Logger] or a [TTY] closes the chained invocation:
 //   - [Config.TTY] returns a [TTY]
@@ -287,7 +291,7 @@ func (cfg *Config) AddSource(toggle bool) *Config {
 //   - "source"
 //
 // Spacing:
-//   - "\n"
+//   - "\n" (results in a newline, followed by a tab)
 //   - " "
 //   - "\t"
 //
@@ -398,10 +402,14 @@ func (cfg *Config) TTY() *TTY {
 	}
 
 	// TTY
-	return &TTY{
+	tty := &TTY{
 		tag:  slog.String("", ""),
 		fmtr: &fmtr,
 	}
+
+	tty.bypass = tty.bounceJSON().Handler()
+
+	return tty
 }
 
 func (cfg *Config) ForceTTY() *Config {
@@ -437,14 +445,12 @@ func (cfg *Config) JSON() Logger {
 	}.NewJSONHandler(cfg.w)
 
 	h := &Handler{
-		tag:       slog.String("", ""),
 		enc:       enc,
 		addSource: cfg.fmtr.addSource,
 		replace:   cfg.replace,
 	}
 
 	return newLogger(h)
-	// return Logger{slog.New(h), h}
 }
 
 // Text returns a Logger using a [slog.TextHandler] for encoding.
@@ -465,5 +471,4 @@ func (cfg *Config) Text() Logger {
 	}
 
 	return newLogger(h)
-	// return Logger{slog.New(h), h}
 }

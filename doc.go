@@ -29,6 +29,7 @@ Generating output similar to the earlier Hello, world progam:
 	log.Infof("Hello, {place}")
 
 Reporting a UFO sighting:
+
 	ufo := errors.New("🛸 spotted")
 	log.Errorf("{place}", ufo)
 
@@ -56,7 +57,8 @@ A [logf.Logger] can be built from a [slog.Handler], and a [logf.Handler] is a va
 
 Example usage:
 
-Construct a [Logger], which is in 
+Construct a [Logger], which is in
+
 	log := logf.New().Logger()
 
 The resulting logger is based on a [TTY] if standard output is a terminal.

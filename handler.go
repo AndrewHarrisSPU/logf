@@ -28,12 +28,17 @@ type Handler struct {
 	addSource bool
 }
 
+// A Grouper is like [slog.LogValuer] in that a Grouper produces structure when expanded.
+// Unlike a [slog.LogValuer] that expands to a group of [Attr]s, the key associated with a Grouper is set by the Grouper.
 type Grouper interface {
 	Group() Attr
 }
 
+// Group satisfies the [Grouper] interface.
+// The returned [Attr]'s key is the [Handler]'s tag.
+// The returned [Attr]'s value is the group of attributes set on the [Handler].
 func (h *Handler) Group() Attr {
-	return slog.Group("", h.attrs...)
+	return slog.Group(h.tag.Value.String(), h.attrs...)
 }
 
 // LogValue returns a [slog.Value], of [slog.GroupKind].

@@ -40,7 +40,7 @@ func (mv mapWithLogValueMethod) LogValue() logf.Value {
 	return logf.GroupValue(as)
 }
 
-func Example_1() {
+func Example_basic() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -156,7 +156,7 @@ func Example_interpolationArguments() {
 		"color", "brindle",
 		"animal", "Boston Terrier",
 	)
-	log.Infof( "The {speed} {color} {animal} ...","speed", "rocketing")
+	log.Infof("The {speed} {color} {animal} ...", "speed", "rocketing")
 
 	// Output:
 	// The quick brown fox ...
@@ -252,7 +252,7 @@ func Example_structure() {
 }
 
 // With a logf.Logger and interpolation, there are a variety of ways to handle an error
-func Example_structureErrors() {
+func Example_wrapErr() {
 	log := logf.New().
 		Colors(false).
 		Layout("message", "\t", "attrs").
@@ -266,23 +266,28 @@ func Example_structureErrors() {
 	log.Error("", err)
 
 	// ii. wrapping the error, with no msg -> the error
-	err2 := logf.FmtError("", err)
+	err2 := logf.WrapErr("", err)
 	fmt.Println(err2.Error())
 
 	// iii. wrapping the error, with interpolated context
-	err3 := logf.FmtError("{emails.user}", err, log)
+	err3 := log.WrapErr("{emails.user}", err)
+	fmt.Println(err3.Error())
+
+	// (equivalently)
+	err3 = logf.WrapErr("{emails.user}", err, log)
 	fmt.Println(err3.Error())
 
 	// iv. wrapping the error, with all available structure
 	//   - log's type is logf.Logger
 	//   - a logf.Logger is also a slog.LogValuer
 	//   - "{}" consumes log's LogValue
-	err4 := logf.FmtError("{}", err, log)
+	err4 := logf.WrapErr("{}", err, log)
 	fmt.Println(err4.Error())
 
 	// Output:
 	// the system is down   emails:{user:Strong Bad id:12345 err:the system is down}
 	// the system is down
+	// Strong Bad: the system is down
 	// Strong Bad: the system is down
 	// [emails.user=Strong Bad emails.id=12345]: the system is down
 }
@@ -300,7 +305,7 @@ func ExampleConfig_Layout() {
 	// left:here Hello!
 }
 
-func Example_Fmt() {
+func Example_fmt() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -315,7 +320,7 @@ func Example_Fmt() {
 	// msg: coconut pie
 }
 
-func ExampleLogger_NewErr() {
+func ExampleLogger_WrapErr() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -324,7 +329,7 @@ func ExampleLogger_NewErr() {
 	log = log.With("flavor", "coconut")
 
 	errInvalidPizza := errors.New("invalid pizza")
-	err := logf.FmtError("{flavor}", errInvalidPizza, log)
+	err := log.WrapErr("{flavor}", errInvalidPizza)
 	fmt.Println("err:", err)
 
 	if errors.Is(err, errInvalidPizza) {
@@ -358,7 +363,7 @@ func ExampleLogger_Info() {
 	// With menace, Kang and Kodos, the Conquerors of Rigel VII uttered "Hello, world"
 }
 
-func Example_Err() {
+func ExampleLogger_Errorf() {
 	log := logf.New().
 		Colors(false).
 		ForceTTY().
@@ -416,6 +421,7 @@ func ExampleLogger_With() {
 	// Output:
 	// species:gopher
 }
+
 /*
 func ExampleLogger_Tag() {
 	log := logf.New().

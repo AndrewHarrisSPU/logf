@@ -1,8 +1,8 @@
 package logf
 
 import (
-	"fmt"
 	"errors"
+	"fmt"
 )
 
 func logFmt(l Logger, f string, args []any) string {
@@ -16,11 +16,11 @@ func logFmt(l Logger, f string, args []any) string {
 	var replace func(Attr) Attr
 	switch h := h.(type) {
 	case *Handler:
-		as = h.attrs		
+		as = h.attrs
 		scope = h.scope
 		replace = h.replace
 	case *TTY:
-		as = h.attrs		
+		as = h.attrs
 		scope = h.scope
 		replace = h.fmtr.sink.replace
 	}
@@ -30,7 +30,7 @@ func logFmt(l Logger, f string, args []any) string {
 
 	s.scanMessage(f)
 	s.joinAttrs(as, scope, replace)
-	for _, a := range Attrs(args...){
+	for _, a := range Attrs(args...) {
 		s.joinOne(a, scope, replace)
 	}
 	s.ipol(f)
@@ -49,11 +49,11 @@ func logFmtErr(l Logger, f string, err error, args []any) error {
 	var replace func(Attr) Attr
 	switch h := h.(type) {
 	case *Handler:
-		as = h.attrs		
+		as = h.attrs
 		scope = h.scope
 		replace = h.replace
 	case *TTY:
-		as = h.attrs		
+		as = h.attrs
 		scope = h.scope
 		replace = h.fmtr.sink.replace
 	}
@@ -76,9 +76,11 @@ func logFmtErr(l Logger, f string, err error, args []any) error {
 		s.WriteString(": ")
 	}
 	s.WriteString("%w")
-	return fmt.Errorf(s.line(), err)	
+	return fmt.Errorf(s.line(), err)
 }
 
+// Fmt interpolates the f string with the given arguments.
+// The arguments parse as with [Attrs].
 func Fmt(f string, args ...any) string {
 	s := newSplicer()
 	defer s.free()
@@ -92,7 +94,10 @@ func Fmt(f string, args ...any) string {
 	return s.line()
 }
 
-func FmtError(f string, err error, args ...any) error {
+// WrapErr interpolates the f string with the given arguments and error.
+// The arguments parse as with [Attrs].
+// The returned error matches [errors.Is]/[errors.As] behavior, as with [fmt.Errorf].
+func WrapErr(f string, err error, args ...any) error {
 	s := newSplicer()
 	defer s.free()
 

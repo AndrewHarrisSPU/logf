@@ -50,7 +50,7 @@ func deadline(ctx context.Context) {
 }
 
 func ping(ctx context.Context, wg *sync.WaitGroup, level slog.Level, interval int) {
-	log := slog.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
 	d := time.Duration(interval)
 	tick := time.NewTicker(d * time.Millisecond).C

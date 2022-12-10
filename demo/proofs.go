@@ -28,7 +28,7 @@ func spacing() {
 	log := logf.New().
 		AddSource(true).
 		Time("dim", logf.TimeShort).
-		Layout("level", "time", "message", "\t", "attrs", "source").
+		Layout("level", "time", "message", "\t", "attrs", "\t", "source").
 		Source("dim", logf.SourceShort).
 		Logger().
 		Tag("spacing")
@@ -104,7 +104,7 @@ func proofs(log *logf.Logger) {
 	println()
 	log.Info("lorem ipsum...")
 	log.With("key", "value")
-	log.Group("group")
+	log.WithGroup("group")
 	log.With("key", "value")
 	log.Error("message text", errors.New("error text"))
 	log.Info("{}", logf.Group("group2", logf.Attrs("key", "value")))
@@ -119,7 +119,7 @@ func styles() {
 		Tag("span_id", "yellow").
 		Logger()
 
-	log = log.Group("http")
+	log = log.WithGroup("http")
 	log = log.With("method", "GET", "uuid", 1)
 	log = log.Tag("styles")
 
@@ -133,7 +133,7 @@ func styles() {
 		"parent_id", nil,
 	))
 
-	log.Info("request #{http.uuid}", baggage)
+	log.Infof("request #{http.uuid}", baggage)
 }
 
 func reality() {

@@ -64,7 +64,7 @@ func (b *Buffer) writeSep() {
 	case '\n':
 		b.WriteByte('\n')
 	case '\t':
-		b.WriteString(sepstring[:tabWidth])
+		b.WriteByte('\t')
 	case '?':
 		b.WriteByte(' ')
 	case '!':

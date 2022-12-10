@@ -13,7 +13,7 @@ import (
 func TestMalformed(t *testing.T) {
 	log := New().JSON()
 
-	want := func(ok string, got string){
+	want := func(ok string, got string) {
 		if ok != got {
 			t.Errorf("want: %s, got: %s", ok, got)
 		}
@@ -30,7 +30,7 @@ func TestMalformed(t *testing.T) {
 }
 
 func TestEscaping(t *testing.T) {
-	want := func(ok string, got string){
+	want := func(ok string, got string) {
 		if ok != got {
 			t.Errorf("want: %s, got: %s", ok, got)
 		}
@@ -42,7 +42,7 @@ func TestEscaping(t *testing.T) {
 
 	want(":", Fmt(":"))
 
-	want("foo", Fmt("{:}", "", "foo" ))
+	want("foo", Fmt("{:}", "", "foo"))
 
 	want(`file.txt`, Fmt(`file\.txt`))
 
@@ -70,7 +70,7 @@ func TestEscaping(t *testing.T) {
 	log6 := log.With("x:y ratio", 2)
 	want("2", Fmt(`{x\:y ratio}`, log6))
 
-	log7 := log.With("👩‍🦰","🛸")
+	log7 := log.With("👩‍🦰", "🛸")
 	want("🛸", Fmt("{👩‍🦰}", log7))
 }
 
@@ -81,14 +81,14 @@ func TestFmt(t *testing.T) {
 	}
 
 	reason := errors.New("reason")
-	err := FmtError("more info", reason)
+	err := WrapErr("more info", reason)
 	if ok := errors.Is(err, reason); !ok {
 		t.Errorf("errors.Is:\n\twant %T, %s\n\tgot  %T, %s", reason, reason.Error(), err, err.Error())
 	}
 }
 
 func TestGroups(t *testing.T) {
-	want := func(ok string, got string){
+	want := func(ok string, got string) {
 		if ok != got {
 			t.Errorf("want: %s, got: %s", ok, got)
 		}
@@ -107,7 +107,7 @@ func TestGroups(t *testing.T) {
 }
 
 func TestGroups2(t *testing.T) {
-	want := func(ok string, got string){
+	want := func(ok string, got string) {
 		if ok != got {
 			t.Errorf("want: %s, got: %s", ok, got)
 		}
@@ -153,7 +153,7 @@ func (s spoof2) LogValue() slog.Value {
 
 // test correctness of interpolation and formatting
 func TestFmtKinds(t *testing.T) {
-	want := func(ok string, got string){
+	want := func(ok string, got string) {
 		if ok != got {
 			t.Errorf("want: %s, got: %s", ok, got)
 		}

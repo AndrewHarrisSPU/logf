@@ -65,7 +65,7 @@ func expandValuerGroup(list *[]Attr, prefix string, v Value) {
 func expandValuer(list *[]Attr, prefix string, lv slog.LogValuer) {
 	v := lv.LogValue().Resolve()
 	if v.Kind() == slog.GroupKind {
-		expandValuerGroup(list, prefix + ".", v)
+		expandValuerGroup(list, prefix+".", v)
 	} else {
 		*list = append(*list, slog.Any(prefix, v))
 	}
@@ -96,7 +96,7 @@ func Attrs(args ...any) (as []Attr) {
 			args = args[2:]
 
 		case Attr:
-			expandAttr(&as,arg)
+			expandAttr(&as, arg)
 			args = args[1:]
 
 		case []Attr:
@@ -111,7 +111,7 @@ func Attrs(args ...any) (as []Attr) {
 			} else if lv, ok := arg.Handler().(slog.LogValuer); ok {
 				expandValuer(&as, "", lv)
 			}
-			args = args[1:]			
+			args = args[1:]
 
 		case Logger:
 			if g, ok := arg.Handler().(Grouper); ok {
