@@ -15,8 +15,7 @@ type gopher struct {
 func newGopher(log logf.Logger, i int) gopher {
 	return gopher{
 		log: log.
-			Tag("gopher").
-			With("id", i),
+			With("#", "euler-gopher", "id", i),
 		sum: 0,
 	}
 }
@@ -41,12 +40,18 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	tty := logf.New().
-		Ref(logf.DEBUG).
+		Layout("level", "tag", "message").
+		Tag("#", "dim").
+		Level(logf.LevelBullet).
 		TTY()
+
+	tty.SetRef(logf.DEBUG)
+
+	tty.FilterTags("euler-gopher", "fizzbuzz")
 
 	log := tty.
 		Logger().
-		Tag("main")
+		With("#", "fizzbuzz")
 
 	ns, sums := make(chan int), make(chan int)
 
@@ -71,5 +76,5 @@ func main() {
 		total += <-sums
 	}
 
-	tty.WriteString(log.Fmt("{}", total))
+	tty.WriteString(log.Fmt("(counted to {})", total))
 }

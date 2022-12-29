@@ -14,15 +14,15 @@ var StdRef slog.LevelVar
 
 var stdMutex sync.Mutex
 
-func writerIsTerminal(w io.Writer) bool {
-	file, isFile := w.(*os.File)
-	if !isFile {
-		return false
-	}
+// func writerIsTerminal(w io.Writer) bool {
+// 	file, isFile := w.(*os.File)
+// 	if !isFile {
+// 		return false
+// 	}
 
-	stat, _ := file.Stat()
-	return (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
-}
+// 	stat, _ := file.Stat()
+// 	return (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
+// }
 
 // CONFIG
 
@@ -69,98 +69,61 @@ func writerIsTerminal(w io.Writer) bool {
 //   - [Config.JSON] returns a [Logger] based on a [slog.JSONHandler]
 //   - [Config.Text] returns a [Logger] based on a [slog.TextHandler]
 type Config struct {
-	// sink config
-	w           io.Writer
-	useStdMutex bool
+	w *ttySyncWriter
 
 	// slog.Handler config
-	ref     slog.Leveler
-	replace func(Attr) Attr
+	ref     *slog.LevelVar
+	replace func([]string, Attr) Attr
 
 	// tty gadgets
-	fmtr      ttyFormatter
-	useColors bool
-	forceTTY  bool
+	aux        slog.Handler
+	fmtr       *ttyFormatter
+	addSource  bool
+	addColors  bool
+	enableTTY  bool
+	forceTTY   bool
+	forceAux   bool
+	setDefault bool
 }
 
 // New opens a Config with default values.
 func New() *Config {
+	w, enableTTY := newTTYSyncWriter(os.Stdout, &stdMutex)
+
 	cfg := &Config{
-		w:           os.Stdout,
-		ref:         &StdRef,
-		replace:     nil,
-		useColors:   true,
-		useStdMutex: true,
+		w:         w,
+		ref:       &StdRef,
+		replace:   nil,
+		addColors: true,
 
-		fmtr: ttyFormatter{
-			// layout
-			layout: []ttyField{
-				ttyLevelField,
-				ttyTimeField,
-				ttyTagsField,
-				ttyMessageField,
-				ttyTabField,
-				ttyAttrsField,
-			},
-
-			// field encodings
-			time: ttyEncoder[time.Time]{
-				"\x1b[2m",
-				EncodeFunc(encTimeShort),
-			},
-			level: ttyEncoder[slog.Level]{
-				"",
-				EncodeFunc(encLevelBar),
-			},
-			message: ttyEncoder[string]{
-				"",
-				nil,
-			},
-			key: ttyEncoder[string]{
-				"\x1b[36;2m",
-				EncodeFunc(encKey),
-			},
-			value: ttyEncoder[Value]{
-				"\x1b[36m",
-				EncodeFunc(encValue),
-			},
-			source: ttyEncoder[SourceLine]{
-				"\x1b[2m",
-				EncodeFunc(encSourceAbs),
-			},
-			groupOpen:  EncodeFunc(encGroupOpen),
-			groupClose: EncodeFunc(encGroupClose),
-
-			// level colors
-			groupPen: "\x1b[2m",
-			debugPen: "\x1b[2m",
-			infoPen:  "\x1b[32;1m",
-			warnPen:  "\x1b[33;1m",
-			errorPen: "\x1b[31;1m",
-
-			// tags
-			tag: map[string]ttyEncoder[Attr]{
-				"#": ttyEncoder[Attr]{
-					"\x1b[35;1m",
-					EncodeFunc(encTag),
-				},
-			},
-		},
+		fmtr:      newTTYFormatter(),
+		enableTTY: enableTTY,
 	}
 
 	return cfg
 }
 
-// Ref configures the use of the given reference [slog.Leveler].
-func (cfg *Config) Ref(level slog.Leveler) *Config {
+// NewDefault is in all ways similar to [New], except that
+// using NewDefault configures the first logger or handler produced by the configuration to become the slogging default,
+// using [slog.SetDefault].
+func NewDefault() *Config {
+	cfg := New()
+	cfg.setDefault = true
+	return cfg
+}
+
+// CONFIG INTERNAL FIELDS
+
+// Ref configures the use of the given reference [slog.LevelVar].
+func (cfg *Config) Ref(level *slog.LevelVar) *Config {
 	cfg.ref = level
 	return cfg
 }
 
 // Writer configures the eventual destination of log lines.
+// Configuring a new writer creates a new mutex guarding it.
 func (cfg *Config) Writer(w io.Writer) *Config {
-	cfg.w = w
-	cfg.useStdMutex = false
+	cfg.w, cfg.enableTTY = newTTYSyncWriter(w, new(sync.Mutex))
 	return cfg
 }
 
@@ -168,7 +131,7 @@ func (cfg *Config) Writer(w io.Writer) *Config {
 //
 // TODO: support cygwin escape codes.
 func (cfg *Config) Colors(toggle bool) *Config {
-	cfg.useColors = toggle
+	cfg.addColors = toggle
 	return cfg
 }
 
@@ -232,7 +195,7 @@ func (cfg *Config) AttrValue(color string, enc Encoder[Value]) *Config {
 
 // Group sets a color and a pair of encoders for opening and closing groups.
 // If the open or close arguments are nil, [Encoder]s that write "{" or "}" tokens are used.
-func (cfg *Config) Group(color string, open Encoder[struct{}], close Encoder[int]) *Config {
+func (cfg *Config) Group(color string, open Encoder[int], close Encoder[int]) *Config {
 	cfg.fmtr.groupPen = newPen(color)
 	if open == nil {
 		open = EncodeFunc(encGroupOpen)
@@ -274,7 +237,7 @@ func (cfg *Config) TagEncode(key string, color string, enc Encoder[Attr]) *Confi
 
 // AddSource configures the inclusion of source file and line information in log lines.
 func (cfg *Config) AddSource(toggle bool) *Config {
-	cfg.fmtr.addSource = toggle
+	cfg.addSource = toggle
 	return cfg
 }
 
@@ -331,90 +294,114 @@ func (cfg *Config) Layout(fields ...string) *Config {
 
 // ReplaceAttr configures the use of the given function to replace Attrs when logging.
 // See [slog.HandlerOptions].
-func (cfg *Config) ReplaceFunc(replace func(a Attr) Attr) *Config {
+func (cfg *Config) ReplaceFunc(replace func(scope []string, a Attr) Attr) *Config {
 	cfg.replace = replace
 	return cfg
 }
 
+// ForceTTY configures any [TTY] produced by the configuration to always encode with
+// [TTY] output. This overrides logic that otherwise falls back to JSON output when
+// a configured writer is not detected to be a terminal.
+func (cfg *Config) ForceTTY(toggle bool) *Config {
+	cfg.forceTTY = toggle
+	return cfg
+}
+
+// Aux configures an auxilliary handler for a [TTY].
+// The auxilliary handler is employed:
+//   - If, the [TTY]'s writer is not a tty devices, and [Config.ForceTTY] is configured false
+//   - Or, if [Config.ForceAux] is configured true.
+//
+// If these conditions are met but no auxilliary handler has been provided,
+// a [slog.JSONHandler] writing to the configured writer is used.
+func (cfg *Config) Aux(aux slog.Handler) *Config {
+	cfg.aux = aux
+	return cfg
+}
+
+// ForceAux configures any [TTY] produced by the configuraton to always employ an
+// auxilliary handler.
+func (cfg *Config) ForceAux(toggle bool) *Config {
+	cfg.forceAux = toggle
+	return cfg
+}
+
+// CONFIG -> HANDLER/LOGGER
+
 // TTY returns a new TTY.
 // If the configured Writer is the same as [StdTTY] (default: [os.Stdout]), the new TTY shares a mutex with [StdTTY].
 func (cfg *Config) TTY() *TTY {
-	// SINK
-	sink := &ttySink{
-		w:       cfg.w,
+	// WRITER
+	// w, enableTTY := newTTYSyncWriter(cfg.w, cfg.mu)
+	// enableTTY = enableTTY || cfg.enableTTY
+
+	// FORMATTER
+	fmtr := cfg.fmtr.clone(cfg.addSource, cfg.addColors)
+
+	// FILTER
+	filter := &ttyFilter{
+		tag: make(map[string]struct{}),
+	}
+
+	// DEVICE
+	dev := &ttyDevice{
+		fmtr:   fmtr,
+		w:      cfg.w,
+		filter: filter,
+
 		ref:     cfg.ref,
 		replace: cfg.replace,
 	}
 
-	if cfg.useStdMutex {
-		sink.mu = &stdMutex
-	} else {
-		sink.mu = new(sync.Mutex)
-	}
-
-	if cfg.forceTTY {
-		sink.enabled = true
-	} else {
-		sink.enabled = writerIsTerminal(sink.w)
-	}
-
-	// FORMATTER
-	fmtr := cfg.fmtr
-
-	fmtr.sink = sink
-
-	var sourceInLayout bool
-	fmtr.layout = make([]ttyField, len(cfg.fmtr.layout))
-	for i, f := range cfg.fmtr.layout {
-		fmtr.layout[i] = f
-		if f == ttySourceField {
-			sourceInLayout = true
-		}
-	}
-
-	if fmtr.addSource && !sourceInLayout {
-		fmtr.layout = append(fmtr.layout, ttyNewlineField, ttySourceField)
-	}
-
-	fmtr.tag = make(map[string]ttyEncoder[Attr], len(cfg.fmtr.tag))
-	for k, v := range cfg.fmtr.tag {
-		fmtr.tag[k] = v
-	}
-
-	if !cfg.useColors {
-		fmtr.time.color = ""
-		fmtr.level.color = ""
-		fmtr.message.color = ""
-		fmtr.key.color = ""
-		fmtr.value.color = ""
-		fmtr.source.color = ""
-
-		fmtr.groupPen = ""
-		fmtr.debugPen = ""
-		fmtr.infoPen = ""
-		fmtr.warnPen = ""
-		fmtr.errorPen = ""
-
-		fmtr.tag["#"] = ttyEncoder[Attr]{
-			"",
-			EncodeFunc(encTag),
-		}
-	}
-
 	// TTY
 	tty := &TTY{
-		tag:  slog.String("", ""),
-		fmtr: &fmtr,
+		dev: dev,
 	}
 
-	tty.bypass = tty.bounceJSON().Handler()
+	setDefault := cfg.setDefault
+	var enableAux bool
+
+	if !cfg.enableTTY && !cfg.forceTTY {
+		dev.w = nil
+		enableAux = true
+	}
+
+	if enableAux || cfg.forceAux {
+		tty.aux = cfg.aux
+
+		if tty.aux == nil {
+			// if both TTY and aux are enabled, ensure they share same mutex
+			// (not elegant /shrug)
+			var w io.Writer
+			if !cfg.enableTTY {
+				w = cfg.w.Writer
+			} else {
+				w = cfg.w
+			}
+
+			// build a JSON handler
+			enc := slog.HandlerOptions{
+				Level:       cfg.ref,
+				AddSource:   cfg.fmtr.addSource,
+				ReplaceAttr: cfg.replace,
+			}.NewJSONHandler(w)
+
+			h := &Handler{
+				enc:       enc,
+				addSource: cfg.fmtr.addSource,
+				replace:   cfg.replace,
+			}
+
+			tty.aux = h
+		}
+	}
+
+	if setDefault {
+		slog.SetDefault(slog.New(tty))
+		cfg.setDefault = false
+	}
 
 	return tty
-}
-
-func (cfg *Config) ForceTTY() *Config {
-	cfg.forceTTY = true
-	return cfg
 }
 
 // If the configured Writer is a terminal, the returned [*Logger] is [TTY]-based
@@ -442,12 +429,17 @@ func (cfg *Config) JSON() Logger {
 		Level:       cfg.ref,
 		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
-	}.NewJSONHandler(cfg.w)
+	}.NewJSONHandler(cfg.w.Writer)
 
 	h := &Handler{
 		enc:       enc,
 		addSource: cfg.fmtr.addSource,
 		replace:   cfg.replace,
+	}
+
+	if cfg.setDefault {
+		slog.SetDefault(slog.New(h))
+		cfg.setDefault = false
 	}
 
 	return newLogger(h)
@@ -461,13 +453,17 @@ func (cfg *Config) Text() Logger {
 		Level:       cfg.ref,
 		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
-	}.NewTextHandler(cfg.w)
+	}.NewTextHandler(cfg.w.Writer)
 
 	h := &Handler{
-		tag:       slog.String("", ""),
 		enc:       enc,
 		addSource: cfg.fmtr.addSource,
 		replace:   cfg.replace,
+	}
+
+	if cfg.setDefault {
+		slog.SetDefault(slog.New(h))
+		cfg.setDefault = false
 	}
 
 	return newLogger(h)

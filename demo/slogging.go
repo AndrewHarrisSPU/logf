@@ -13,21 +13,27 @@ import (
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
-	tty := logf.New().
+	tty := logf.NewDefault().
 		AddSource(true).
-		Ref(logf.DEBUG).
 		Layout("level", "time", "tags", "message", "source").
 		Time("dim", logf.TimeShort).
 		Source("dim", logf.SourceShort).
-		Tag("place", "cyan").
+		Tag("place", "dim magenta").
 		Tag("i", "bright magenta").
+		Tag("done", "bright magenta").
 		TTY()
 
-	slog.SetDefault(slog.New(tty.WithAttrs(logf.Attrs(
-		"place", "world",
-	))))
+	tty.SetRef(logf.DEBUG)
 
-	ctx := slog.NewContext(context.Background(), slog.Default())
+	tty.FilterRecords(func(r slog.Record) bool {
+		var ok bool
+		r.Attrs(func(a slog.Attr) {
+			ok = ok || a.Key == "done"
+		})
+		return ok
+	})
+
+	ctx := slog.NewContext(context.Background(), slog.Default().With("place", "slogoverse"))
 	d := 5_000 * time.Millisecond
 	ctx, _ = context.WithTimeout(ctx, d)
 
@@ -50,7 +56,7 @@ func deadline(ctx context.Context) {
 }
 
 func ping(ctx context.Context, wg *sync.WaitGroup, level slog.Level, interval int) {
-	log := logf.FromContext(ctx)
+	log := slog.FromContext(ctx)
 
 	d := time.Duration(interval)
 	tick := time.NewTicker(d * time.Millisecond).C
@@ -61,7 +67,7 @@ func ping(ctx context.Context, wg *sync.WaitGroup, level slog.Level, interval in
 			log.Log(level, "tick", "i", i)
 			i++
 		case <-ctx.Done():
-			log.Log(1, "bye!", "i", i)
+			log.Log(level, "", "done", "bye!")
 			wg.Done()
 			return
 		}

@@ -11,27 +11,24 @@ func logFmt(l Logger, f string, args []any) string {
 		return f
 	}
 
-	var as []Attr
-	var scope string
-	var replace func(Attr) Attr
+	var store Store
+	var replace func([]string, Attr) Attr
 	switch h := h.(type) {
 	case *Handler:
-		as = h.attrs
-		scope = h.scope
+		store = h.store
 		replace = h.replace
 	case *TTY:
-		as = h.attrs
-		scope = h.scope
-		replace = h.fmtr.sink.replace
+		store = h.store
+		replace = h.dev.replace
 	}
 
 	s := newSplicer()
 	defer s.free()
 
 	s.scanMessage(f)
-	s.joinAttrs(as, scope, replace)
+	s.joinStore(store, replace)
 	for _, a := range Attrs(args...) {
-		s.joinOne(a, scope, replace)
+		s.joinLocal(store.scope, a, replace)
 	}
 	s.ipol(f)
 
@@ -44,27 +41,24 @@ func logFmtErr(l Logger, f string, err error, args []any) error {
 		return err
 	}
 
-	var as []Attr
-	var scope string
-	var replace func(Attr) Attr
+	var store Store
+	var replace func([]string, Attr) Attr
 	switch h := h.(type) {
 	case *Handler:
-		as = h.attrs
-		scope = h.scope
+		store = h.store
 		replace = h.replace
 	case *TTY:
-		as = h.attrs
-		scope = h.scope
-		replace = h.fmtr.sink.replace
+		store = h.store
+		replace = h.dev.replace
 	}
 
 	s := newSplicer()
 	defer s.free()
 
 	s.scanMessage(f)
-	s.joinAttrs(as, scope, replace)
+	s.joinStore(store, replace)
 	for _, a := range Attrs(args...) {
-		s.joinOne(a, "", nil)
+		s.joinLocal(store.scope, a, replace)
 	}
 	s.ipol(f)
 
@@ -87,7 +81,7 @@ func Fmt(f string, args ...any) string {
 
 	s.scanMessage(f)
 	for _, a := range Attrs(args...) {
-		s.joinOne(a, "", nil)
+		s.joinLocal(nil, a, nil)
 	}
 	s.ipol(f)
 
@@ -103,7 +97,7 @@ func WrapErr(f string, err error, args ...any) error {
 
 	s.scanMessage(f)
 	for _, a := range Attrs(args...) {
-		s.joinOne(a, "", nil)
+		s.joinLocal(nil, a, nil)
 	}
 	s.ipol(f)
 

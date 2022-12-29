@@ -1,6 +1,5 @@
 package logf
 
-/*
 import (
 	"errors"
 	"io"
@@ -29,7 +28,7 @@ func benchLogfInitManual(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		h := &Handler{
-			attrs:     make([]Attr, 0),
+			// attrs:     make([]Attr, 0),
 			enc:       slog.NewJSONHandler(io.Discard),
 			addSource: false,
 		}
@@ -113,7 +112,7 @@ func BenchmarkAttrs(b *testing.B) {
 		// {"fastText discard", newFastTextHandler(io.Discard)},
 		{"Text discard", slog.NewTextHandler(io.Discard)},
 		{"JSON discard", slog.HandlerOptions{AddSource: false}.NewJSONHandler(io.Discard)},
-		{"logf discard", New().Writer(io.Discard).JSON().h()},
+		{"logf discard", New().Writer(io.Discard).JSON().Handler().(handler)},
 	} {
 		logger := slog.New(handler.h)
 		b.Run(handler.name, func(b *testing.B) {
@@ -256,7 +255,12 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scanMessage("{} {} {} {} {}")
-		s.joinArgs(TestAny5, "", nil)
+		s.joinStore(Store{
+			scope: []string{},
+			as: [][]Attr{
+				TestAttrs,
+			},
+		}, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -269,7 +273,12 @@ func BenchmarkSplicer(b *testing.B) {
 		defer s.free()
 
 		s.scanMessage("{string} {status} {duration} {time} {error}")
-		s.joinArgs(TestAny5, "", nil)
+		s.joinStore(Store{
+			scope: []string{},
+			as: [][]Attr{
+				TestAttrs,
+			},
+		}, nil)
 
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -475,4 +484,3 @@ var TestAny40 = []any{
 	slog.Time("30", TestTime),
 	slog.Any("40", TestError),
 }
-*/

@@ -17,14 +17,12 @@ func (p pen) use(b *Buffer) {
 	if len(p) > 0 {
 		b.WriteString(string(p))
 	}
-	return
 }
 
 func (p pen) drop(b *Buffer) {
 	if len(p) > 0 {
 		b.WriteString("\x1b[0m")
 	}
-	return
 }
 
 func newPen(s string) pen {
@@ -125,13 +123,13 @@ func newPen(s string) pen {
 func (tty *TTY) levelPen(level slog.Level) (p pen) {
 	switch {
 	case level < INFO:
-		p = tty.fmtr.debugPen
+		p = tty.dev.fmtr.debugPen
 	case level < WARN:
-		p = tty.fmtr.infoPen
+		p = tty.dev.fmtr.infoPen
 	case level < ERROR:
-		p = tty.fmtr.warnPen
+		p = tty.dev.fmtr.warnPen
 	default:
-		p = tty.fmtr.errorPen
+		p = tty.dev.fmtr.errorPen
 	}
 	return
 }
@@ -140,8 +138,10 @@ func (tty *TTY) levelPen(level slog.Level) (p pen) {
 
 func init() {
 	LevelBar = EncodeFunc(encLevelBar)
+	LevelBullet = EncodeFunc(encLevelBullet)
 	LevelText = EncodeFunc(encLevelText)
 	TimeShort = EncodeFunc(encTimeShort)
+	TimeRFC3339Nano = EncodeFunc(encTimeRFC3339Nano)
 	SourceAbs = EncodeFunc(encSourceAbs)
 	SourceShort = EncodeFunc(encSourceShort)
 	SourcePkg = EncodeFunc(encSourcePkg)
@@ -151,11 +151,17 @@ var (
 	// a minimal Unicode depcition of log level
 	LevelBar Encoder[slog.Level]
 
+	// bullet point Unicode depiction of log level
+	LevelBullet Encoder[slog.Level]
+
 	// [slog.Level.String] text
 	LevelText Encoder[slog.Level]
 
 	// with time format "15:04:05"
 	TimeShort Encoder[time.Time]
+
+	// with time format "15:04:05"
+	TimeRFC3339Nano Encoder[time.Time]
 
 	// absolute source file path, plus line number
 	SourceAbs Encoder[SourceLine]
@@ -167,7 +173,7 @@ var (
 	SourcePkg Encoder[SourceLine]
 )
 
-func encGroupOpen(b *Buffer, _ struct{}) {
+func encGroupOpen(b *Buffer, count int) {
 	b.WriteString("{")
 }
 
@@ -175,7 +181,6 @@ func encGroupClose(b *Buffer, count int) {
 	for i := 0; i < count; i++ {
 		b.WriteByte('}')
 	}
-	return
 }
 
 func encKey(b *Buffer, key string) {
@@ -208,11 +213,11 @@ func encLevelBullet(b *Buffer, level slog.Level) {
 	case level < INFO:
 		b.WriteString(" ╴ ")
 	case level < WARN:
-		b.WriteString(" ─ ")
+		b.WriteString(" ╼ ")
 	case level < ERROR:
-		b.WriteString(" ━ ")
+		b.WriteString(" ╼ ")
 	default:
-		b.WriteString(" ━━")
+		b.WriteString(" ╼ ")
 	}
 }
 
@@ -231,6 +236,10 @@ func encLevelBar(b *Buffer, level slog.Level) {
 
 func encTimeShort(b *Buffer, t time.Time) {
 	b.WriteString(t.Format("15:04:05"))
+}
+
+func encTimeRFC3339Nano(b *Buffer, t time.Time) {
+	b.WriteString(t.Format(time.RFC3339Nano))
 }
 
 // SourceLine is the carrier of information for source annotation [Encoder]s.

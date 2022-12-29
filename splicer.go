@@ -12,14 +12,11 @@ import (
 )
 
 const (
-	corruptKind         = "!corrupt-kind"
-	missingAttr         = "!missing-attr"
-	missingArg          = "!missing-arg"
-	missingKey          = "!missing-key"
-	missingRightBracket = "!missing-right-bracket"
+	corruptKind = "!corrupt-kind"
+	missingAttr = "!missing-attr"
+	missingArg  = "!missing-arg"
+	missingKey  = "!missing-key"
 )
-
-var missingAttrValue = slog.StringValue("!missing-attr-value")
 
 // LIFECYCLE
 
@@ -47,6 +44,8 @@ type splicer struct {
 	// also holds stack of keys when interpolating groups
 	scratch []byte
 
+	matchStack []string
+
 	// holds map of keyed interpolation symbols
 	dict map[string]slog.Value
 
@@ -64,10 +63,11 @@ func newSplicer() *splicer {
 var spool = sync.Pool{
 	New: func() any {
 		return &splicer{
-			text:    make([]byte, 0, 1024),
-			scratch: make([]byte, 0, 1024),
-			dict:    make(map[string]slog.Value, 5),
-			export:  make([]Attr, 0, 5),
+			text:       make([]byte, 0, 1024),
+			scratch:    make([]byte, 0, 1024),
+			matchStack: make([]string, 0, 16),
+			dict:       make(map[string]slog.Value, 5),
+			export:     make([]Attr, 0, 5),
 		}
 	},
 }
@@ -77,9 +77,11 @@ var spool = sync.Pool{
 func (s *splicer) free() {
 	const maxTextSize = 16 << 10
 	const maxAttrSize = 128
+	const maxStackSize = 128
 
 	ok := cap(s.text)+cap(s.scratch) < maxTextSize
 	ok = ok && (len(s.dict)+cap(s.export)) < maxAttrSize
+	ok = ok && (len(s.matchStack)) < maxStackSize
 
 	if ok {
 		s.clear()
@@ -112,126 +114,76 @@ func (s *splicer) line() string {
 	return string(s.text)
 }
 
-// used for adding Record attrs
-func (s *splicer) addAttr(a Attr, replace func(Attr) Attr) {
+// used for adding Record attrs; doesn't match
+func (s *splicer) addAttr(a Attr, replace replaceFunc) {
 	if replace != nil {
-		a = replace(a)
+		a = replace(nil, a)
 	}
 	s.export = append(s.export, a)
 }
 
 // JOIN / MATCH
-
-func (s *splicer) joinAttrs(as []Attr, scope string, replace func(Attr) Attr) {
-	for _, a := range as {
-		s.join(a, scope, replace)
-	}
+func (s *splicer) joinStore(store Store, replace replaceFunc) {
+	store.Attrs(func(scope []string, a Attr) {
+		s.match(scope, a, replace)
+	})
 }
 
-func (s *splicer) joinArgs(args []any, scope string, replace func(Attr) Attr) {
-	pos := len(s.export)
-	for len(args) > 0 {
-		args = parseAttr(&s.export, args)
-	}
-	for _, a := range s.export[pos:] {
-		s.join(a, scope, replace)
-	}
-}
-
-func (s *splicer) joinOne(a Attr, scope string, replace func(Attr) Attr) {
-	s.export = append(s.export, a)
-	s.join(a, scope, replace)
-}
-
-func (s *splicer) join(a Attr, scope string, replace func(Attr) Attr) {
+func (s *splicer) joinLocal(stack []string, a Attr, replace replaceFunc) {
 	if replace != nil {
-		a = replace(a)
+		a = replace(stack, a)
 	}
-	s.match(scope, a, replace)
+
+	s.export = append(s.export, a)
+	s.matchLocal(stack, a, replace)
+	s.match(stack, a, replace)
 }
 
-// root of matching invocation
-// here, an attr key is known to be needed for interpolation
-// match attempts to puts the right value in the dictionary
-func (s *splicer) match(scope string, a Attr, replace func(Attr) Attr) {
-	// match if raw attr key is found in dictionary
+func (s *splicer) matchLocal(stack []string, a Attr, replace replaceFunc) {
+	if replace != nil {
+		a = replace(stack, a)
+	}
+
 	if _, found := s.dict[a.Key]; found {
 		s.dict[a.Key] = a.Value
-		return
 	}
-
-	// match if given prefix + attr key is found in dictionary
-	if _, found := s.dict[scope+a.Key]; found {
-		s.dict[scope+a.Key] = a.Value
-		return
-	}
-
-	// if lv, ok := a.Value.Any().(slog.LogValuer); ok {
-	// 	v := lv.LogValue().Resolve()
-	// 	if v.Kind() == slog.GroupKind {
-	// 		gpos := len(s.scratch)
-	// 		s.scratch = append(s.scratch, a.Key...)
-	// 		s.scratch = append(s.scratch, '.')
-
-	// 		s.matchRec(v.Group(), gpos, replace)
-
-	// 		s.scratch = s.scratch[:gpos]
-	// 	}
-	// 	return
-	// }
 
 	if a.Value.Kind() == slog.GroupKind {
-		// store a marker that deliminates s.scratch state before subsequent matchRec operations
-		gpos := len(s.scratch)
+		stack = append(stack, a.Key)
 
-		if len(a.Key) > 0 {
-			// push attr key
-			s.scratch = append(s.scratch, a.Key...)
-			s.scratch = append(s.scratch, '.')
+		for _, a := range a.Value.Group() {
+			s.match(stack, a, replace)
 		}
 
-		s.matchRec(a.Value.Group(), gpos, replace)
-
-		// pop attr key
-		s.scratch = s.scratch[:gpos]
+		stack = stack[:len(stack)-1]
 	}
 }
 
-// recursive matching invocation
-func (s *splicer) matchRec(group []Attr, gpos int, replace func(Attr) Attr) {
-	// store a marker that deliminates s.scratch state per attr operation
-	apos := len(s.scratch)
+func (s *splicer) match(stack []string, a Attr, replace replaceFunc) {
+	if replace != nil {
+		a = replace(stack, a)
+	}
 
-	for _, a := range group {
-		// push attr key
-		s.scratch = append(s.scratch, a.Key...)
+	var key string
+	if len(stack) > 0 {
+		key = strings.Join(stack, ".")
+		key += "."
+	}
+	key += a.Key
 
-		// match
-		key := string(s.scratch[gpos:])
-		if _, found := s.dict[key]; found {
-			if replace != nil {
-				a = replace(a)
-			}
-			s.dict[key] = a.Value
+	// properly scoped
+	if _, found := s.dict[key]; found {
+		s.dict[key] = a.Value
+	}
+
+	if a.Value.Kind() == slog.GroupKind {
+		stack = append(stack, a.Key)
+
+		for _, a := range a.Value.Group() {
+			s.match(stack, a, replace)
 		}
 
-		// if lv, ok := a.Value.Any().(slog.LogValuer); ok {
-		// 	v := lv.LogValue().Resolve()
-		// 	if v.Kind() == slog.GroupKind {
-		// 		s.scratch = append(s.scratch, '.')
-		// 		s.matchRec(v.Group(), gpos, replace)
-		// 	}
-		// }
-
-		// recursively matchRec, one deeper level
-		// (keep gpos invariant through matchRec)
-		if a.Value.Kind() == slog.GroupKind {
-			s.scratch = append(s.scratch, '.')
-			s.matchRec(a.Value.Group(), gpos, replace)
-		}
-
-		// pop attr key
-		s.scratch = s.scratch[:apos]
+		stack = stack[:len(stack)-1]
 	}
 }
 
@@ -257,19 +209,6 @@ func (s *splicer) WriteString(m string) (int, error) {
 }
 
 // TYPED WRITES
-
-func (s *splicer) writeArg(arg any, verb []byte) {
-	switch arg := arg.(type) {
-	case Attr:
-		s.WriteValue(arg.Value, verb)
-	case []Attr:
-		s.writeGroup(arg)
-	case slog.LogValuer:
-		s.WriteValue(arg.LogValue(), verb)
-	default:
-		s.WriteValue(slog.AnyValue(arg), verb)
-	}
-}
 
 func (s *splicer) WriteValue(v slog.Value, verb []byte) {
 	if len(verb) > 0 {
@@ -356,13 +295,6 @@ func (s *splicer) writeDurationVerb(d time.Duration, verb string) {
 	default:
 		fmt.Fprintf(s, verb, d.String())
 	}
-}
-
-func (s *splicer) writeError(extended int, err error) {
-	if extended > 0 {
-		s.WriteString(": ")
-	}
-	s.WriteString(err.Error())
 }
 
 func (s *splicer) writeGroup(as []Attr) {

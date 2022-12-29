@@ -61,15 +61,19 @@ func allocSplicerFunc(arg any, verb string) func() {
 		msg = fmt.Sprintf("{key:%s}", verb)
 	}
 
-	a := slog.Any("key", arg)
-	list := []Attr{a}
+	store := Store{
+		scope: []string{},
+		as: [][]Attr{
+			[]Attr{slog.Any("key", arg)},
+		},
+	}
 
 	return func() {
 		s := newSplicer()
 		defer s.free()
 
 		s.scanMessage(msg)
-		s.joinAttrs(list, "", nil)
+		s.joinStore(store, nil)
 		s.ipol(msg)
 		io.WriteString(io.Discard, s.line())
 	}

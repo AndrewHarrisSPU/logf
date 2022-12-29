@@ -2,9 +2,8 @@ package logf
 
 import (
 	"io"
-	"strings"
+	"os"
 	"sync"
-	"time"
 
 	"golang.org/x/exp/slog"
 )
@@ -22,134 +21,155 @@ import (
 //
 //	go run demo/<some demo file>.go
 type TTY struct {
-	fmtr   *ttyFormatter
-	bypass slog.Handler
+	dev *ttyDevice
+	aux slog.Handler
 
-	// group
-	scope   string
-	openKey string
-	nOpen   int
+	// unformatted
+	store Store
+	label Attr
 
-	// attrs
-	attrs    []Attr
+	// attr preformatting
 	attrText string
 	attrSep  byte
 
-	// tags
-	tag     Attr
+	// tag preformatting
 	tagText string
 	tagSep  byte
 }
 
-// ttyFormatter manages state relevant to encoding a record to bytes
-type ttyFormatter struct {
-	sink   *ttySink
-	layout []ttyField
-	tag    map[string]ttyEncoder[Attr]
+type ttyDevice struct {
+	w      *ttySyncWriter
+	fmtr   *ttyFormatter
+	filter *ttyFilter
 
-	time       ttyEncoder[time.Time]
-	level      ttyEncoder[slog.Level]
-	message    ttyEncoder[string]
-	key        ttyEncoder[string]
-	value      ttyEncoder[Value]
-	source     ttyEncoder[SourceLine]
-	groupOpen  Encoder[struct{}]
-	groupClose Encoder[int]
+	ref *slog.LevelVar
 
-	groupPen pen
-	debugPen pen
-	infoPen  pen
-	warnPen  pen
-	errorPen pen
-
-	addSource bool
+	replace replaceFunc
 }
 
-// ttySink manages state relevant to writing bytes, concurrently, on-screen (or wherever)
-type ttySink struct {
-	w       io.Writer
-	ref     slog.Leveler
-	mu      *sync.Mutex
-	replace func(Attr) Attr
-
-	enabled bool
+// ttySyncWriter manages state relevant to writing bytes, concurrently, on-screen (or wherever)
+type ttySyncWriter struct {
+	io.Writer
+	*sync.Mutex
 }
 
-func (tty *TTY) bounceJSON() Logger {
-	cfg := &Config{
-		w:       tty.fmtr.sink.w,
-		ref:     tty.fmtr.sink.ref,
-		replace: tty.fmtr.sink.replace,
+func newTTYSyncWriter(w io.Writer, mu *sync.Mutex) (*ttySyncWriter, bool) {
+	var isTTY bool
+	file, isFile := w.(*os.File)
+	if !isFile {
+		isTTY = false
+	} else {
+		stat, _ := file.Stat()
+		isTTY = (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
 	}
+	return &ttySyncWriter{w, mu}, isTTY
+}
 
-	cfg.AddSource(tty.fmtr.addSource)
+func (w *ttySyncWriter) Write(p []byte) (n int, err error) {
+	w.Lock()
+	n, err = w.Writer.Write(p)
+	w.Unlock()
+	return
+}
 
-	log := cfg.JSON()
-
-	if len(tty.attrs) > 0 {
-		log = log.With(tty.attrs)
-	}
-	if tty.scope != "" {
-		for _, name := range strings.Split(tty.scope, ".") {
-			log = log.WithGroup(name)
-		}
-	}
-
-	return log
+// ttyFilter manages some state relevant to filtering log lines
+type ttyFilter struct {
+	tag    map[string]struct{}
+	record func(slog.Record) bool
 }
 
 // Logger returns a [Logger] that uses the [TTY] as a handler.
 func (tty *TTY) Logger() Logger {
-	if !tty.fmtr.sink.enabled {
-		return tty.bounceJSON()
+	if tty.dev.w == nil {
+		return newLogger(tty.aux.(handler))
 	}
 
 	return newLogger(tty)
 }
 
-func (tty *TTY) group() Attr {
-	return slog.Group("", tty.attrs...)
-}
-
 // LogValue returns a [slog.Value], of [slog.GroupKind].
 // The group of [Attr]s is the collection of attributes present in log lines handled by the [TTY].
 func (tty *TTY) LogValue() slog.Value {
-	return slog.GroupValue(tty.attrs...)
+	return tty.store.LogValue()
 }
 
 // WriteString satisfies the [io.StringWriter] interface.
 // It is safe to call Write concurrently with other methods that write [TTY] output.
-// A trailing newline is appended to the string.
+// A trailing newline is appended to the output.
 // If a program detects that a [TTY] does not write to a terminal device, WriteString is a no-op.
 func (tty *TTY) WriteString(s string) (n int, err error) {
-	if !tty.fmtr.sink.enabled {
+	if tty.dev.w == nil {
 		return 0, nil
 	}
 
-	tty.fmtr.sink.mu.Lock()
-	defer tty.fmtr.sink.mu.Unlock()
+	return io.WriteString(tty.dev.w, s+"\n")
+}
 
-	return io.WriteString(tty.fmtr.sink.w, s+"\n")
+// Println formats the given string, and then writes it (with [TTY.WriteString])
+func (tty *TTY) Printf(f string, args ...any) {
+	if tty.dev.w == nil {
+		return
+	}
+
+	s := newSplicer()
+	defer s.free()
+
+	s.scanMessage(f)
+	s.joinStore(tty.store, tty.dev.replace)
+	for _, a := range Attrs(args...) {
+		s.joinLocal(tty.store.scope, a, tty.dev.replace)
+	}
+	s.ipol(f)
+
+	tty.WriteString(s.line())
+}
+
+func (tty *TTY) SetRef(level slog.Level) {
+	tty.dev.ref.Set(level)
+}
+
+// Filter sets a filter on [TTY] output, using the given set of tags.
+func (tty *TTY) Filter(tags ...string) {
+	tty.dev.w.Lock()
+	defer tty.dev.w.Unlock()
+
+	for tag := range tty.dev.filter.tag {
+		delete(tty.dev.filter.tag, tag)
+	}
+
+	for _, tag := range tags {
+		tty.dev.filter.tag[tag] = struct{}{}
+	}
 }
 
 // HANDLER
 
 // Enabled reports whether the [TTY] is enabled for logging at the given level.
 func (tty *TTY) Enabled(level slog.Level) bool {
-	return level >= tty.fmtr.sink.ref.Level()
+	return level >= tty.dev.ref.Level()
 }
 
 // See [slog.WithAttrs].
 func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 	t2 := *tty
-	t2.bypass = tty.bypass.WithAttrs(as)
 
-	// attr copy & extend
-	scoped := scopeAttrs(t2.scope, as, t2.fmtr.sink.replace)
-	t2.attrs = concat(tty.attrs, scoped)
+	// find & assign label
+	as, t2.label = detectLabel(as, tty.label)
 
-	// for consistency, use splicer methods to write attr text
-	// (but not one from the pool)
+	// store
+	t2.store = tty.store.WithAttrs(as)
+
+	// aux
+	if t2.aux != nil {
+		t2.aux = tty.aux.WithAttrs(as)
+	}
+
+	// preformatting
+	if t2.dev.w == nil {
+		return &t2
+	}
+
+	// (for consistency, using splicer methods to write attr and tag text)
 	s := newSplicer()
 	defer s.free()
 
@@ -157,17 +177,7 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 
 	// append attr text
 	b.sep = tty.attrSep
-	if len(t2.openKey) > 0 {
-		b.writeSep()
-
-		t2.fmtr.key.color.use(b)
-		t2.fmtr.key.Encode(b, t2.openKey)
-		t2.fmtr.key.color.drop(b)
-
-		t2.encAttrGroupOpen(b, t2.openKey)
-		t2.openKey = ""
-	}
-	t2.encListAttrs(b, "", as)
+	t2.encListAttrs(b, as)
 
 	t2.attrSep = b.sep
 	t2.attrText = tty.attrText + s.line()
@@ -175,7 +185,7 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 	// append tag text
 	s.text = s.text[:0]
 	b.sep = t2.tagSep
-	t2.encListTags(b, "", as)
+	t2.encListTags(b, as)
 	t2.tagSep = b.sep
 	t2.tagText = tty.tagText + s.line()
 
@@ -185,48 +195,78 @@ func (tty *TTY) WithAttrs(as []Attr) slog.Handler {
 // See [slog.Handler.WithGroup].
 func (tty *TTY) WithGroup(name string) slog.Handler {
 	t2 := *tty
-	t2.bypass = tty.bypass.WithGroup(name)
-	t2.openKey = name
-	t2.nOpen = tty.nOpen + 1
-	t2.scope = tty.scope + name + "."
 
-	return &t2
-}
+	// handler store
+	t2.store = tty.store.WithGroup(name)
 
-func (tty *TTY) withTag(tag string) handler {
-	t2 := *tty
-	t2.tag = slog.String("#", tag)
+	// device aux
+	if t2.aux != nil {
+		t2.aux = tty.aux.WithGroup(name)
+	}
 
-	return &t2
-}
-
-// Handle logs the given [slog.Record] to [TTY] output.
-func (tty *TTY) Handle(r slog.Record) error {
-	if !tty.fmtr.sink.enabled {
-		tty.bypass.Handle(r)
-		return nil
+	// preformatting
+	if t2.dev.w == nil {
+		return &t2
 	}
 
 	s := newSplicer()
 	defer s.free()
 
-	var err error
+	b := &Buffer{s, 0}
+	b.sep = tty.attrSep
+
+	b.writeSep()
+	b.sep = 0
+
+	t2.dev.fmtr.key.Encode(b, name)
+	t2.encAttrGroupOpen(b)
+
+	t2.attrSep = b.sep
+
+	t2.attrText = tty.attrText + s.line()
+	return &t2
+}
+
+// Handle logs the given [slog.Record] to [TTY] output.
+func (tty *TTY) Handle(r slog.Record) (auxErr error) {
+	if tty.aux != nil {
+		auxErr = tty.aux.Handle(r)
+	}
+
+	if tty.dev.w == nil {
+		return
+	}
+
+	_, enabled := tty.dev.filter.tag[tty.label.Value.String()]
+
+	// formatting
+	s := newSplicer()
+	defer s.free()
+
+	s.joinStore(tty.store, tty.dev.replace)
+
+	var recordErr error
 	r.Attrs(func(a Attr) {
-		s.addAttr(a, tty.fmtr.sink.replace)
+		if a.Key == "#" {
+			_, enabled = tty.dev.filter.tag[a.Value.String()]
+			return
+		}
 		if a.Key == "err" {
 			if curr, isErr := a.Value.Any().(error); isErr {
-				err = curr
+				recordErr = curr
 			}
 		}
+		s.joinLocal(tty.store.scope, a, tty.dev.replace)
 	})
 
+	if len(tty.dev.filter.tag) > 0 && !enabled {
+		return nil
+	}
+
 	file, line := r.SourceLine()
-	tty.encFields(s, r.Level, r.Message, err, SourceLine{file, line})
+	tty.encFields(s, r.Level, r.Message, recordErr, SourceLine{file, line})
 
-	tty.fmtr.sink.mu.Lock()
-	defer tty.fmtr.sink.mu.Unlock()
-
-	tty.fmtr.sink.w.Write(s.text)
+	tty.dev.w.Write(s.text)
 
 	return nil
 }

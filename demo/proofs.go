@@ -31,7 +31,7 @@ func spacing() {
 		Layout("level", "time", "message", "\t", "attrs", "\t", "source").
 		Source("dim", logf.SourceShort).
 		Logger().
-		Tag("spacing")
+		With("#", "spacing")
 
 	log.Info("_", "len", 1)
 	log.Info("__", "len", 2)
@@ -46,8 +46,10 @@ func spacing() {
 }
 
 func level() {
+	logf.StdRef.Set(logf.DEBUG)
+	defer logf.StdRef.Set(logf.INFO)
+
 	log := logf.New().
-		Ref(logf.DEBUG-4).
 		LevelColors("dim", "bright green", "bright yellow", "bright red").
 		Logger().
 		With("key", "value").
@@ -64,8 +66,10 @@ func level() {
 }
 
 func levelText() {
+	logf.StdRef.Set(logf.DEBUG)
+	defer logf.StdRef.Set(logf.INFO)
+
 	log := logf.New().
-		Ref(logf.DEBUG-4).
 		Level(logf.LevelText).
 		Layout("time", "level", "tags", "message", "attrs").
 		Logger().
@@ -83,8 +87,10 @@ func levelText() {
 }
 
 func levelMono() {
+	logf.StdRef.Set(logf.DEBUG)
+	defer logf.StdRef.Set(logf.INFO)
+
 	log := logf.New().
-		Ref(logf.DEBUG-4).
 		Colors(false).
 		Logger().
 		With("key", "value").
@@ -121,7 +127,7 @@ func styles() {
 
 	log = log.WithGroup("http")
 	log = log.With("method", "GET", "uuid", 1)
-	log = log.Tag("styles")
+	log = log.With("#", "styles")
 
 	log.Info("a request")
 

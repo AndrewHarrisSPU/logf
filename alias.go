@@ -41,6 +41,13 @@ func concat[T any](head, tail []T) (ts []T) {
 	return
 }
 
+func concatOne[T any](head []T, tail T) (ts []T) {
+	ts = make([]T, len(head), len(head)+1)
+	copy(ts, head)
+	ts = append(ts, tail)
+	return
+}
+
 // Cheap integer to fixed-width decimal ASCII. Give a negative width to avoid zero-padding.
 // Copied from log/log.go.
 func itoa(buf *[]byte, i int, wid int) {

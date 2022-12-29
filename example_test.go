@@ -15,7 +15,7 @@ func ExampleEncoder() {
 
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Level(logf.LevelBar).
 		Source("", logf.SourceShort).
 		AddSource(true).
@@ -37,13 +37,13 @@ func (mv mapWithLogValueMethod) LogValue() logf.Value {
 		as = append(as, logf.KV(k, v))
 	}
 
-	return logf.GroupValue(as)
+	return logf.GroupValue(as...)
 }
 
 func Example_basic() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	// Like slog
@@ -91,7 +91,7 @@ func ExampleFmt() {
 func Example_formattingVerbs() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	log.Infof("{left-pad:%010d}", "left-pad", 1)
@@ -105,7 +105,7 @@ func Example_formattingVerbs() {
 func Example_interpolationArguments() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	// Unkeyed `{}` symbols parse key/value pairs in the logging call:
@@ -132,7 +132,7 @@ func Example_interpolationArgumentsMixed() {
 	log := logf.New().
 		Colors(false).
 		Layout("message", "\t", "attrs").
-		ForceTTY().
+		ForceTTY(true).
 		Logger()
 
 	// The unkeyed interpolation token `{}` consumes the first agument pair ("pi", 3.14)
@@ -147,7 +147,7 @@ func Example_interpolationArgumentsMixed() {
 func Example_interpolationEscapes() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	// A Salvador Dali mustache emoji needs no escaping - there is no interpolation
@@ -180,7 +180,7 @@ func Example_interpolationEscapes() {
 func Example_interpolationTimeVerbs() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	log.Infof("time interpolation formatting:")
@@ -215,7 +215,7 @@ func Example_interpolationTimeVerbs() {
 func Example_interpolationLogValuer() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	vmap := mapWithLogValueMethod{
@@ -241,9 +241,9 @@ func Example_interpolationLogValuer() {
 // For convenience, logf aliases or reimplements some [slog.Attr]-forming functions.
 func Example_structure() {
 	log := logf.New().
-		Colors(false).
 		Layout("message", "\t", "attrs").
-		ForceTTY().
+		Colors(false).
+		ForceTTY(true).
 		Logger()
 
 	// logf.Attr <=> slog.Attr
@@ -261,7 +261,7 @@ func Example_structure() {
 	)
 
 	// Group <=> slog.Group
-	agent := logf.Group("agent", mulder)
+	agent := logf.Group("agent", mulder...)
 
 	log = log.With(agent)
 	log.Info("The Truth Is Out There")
@@ -273,9 +273,9 @@ func Example_structure() {
 // Logging, wrapping, and bubbling errors are all possible
 func ExampleWrapErr() {
 	log := logf.New().
-		Colors(false).
 		Layout("message", "\t", "attrs").
-		ForceTTY().
+		Colors(false).
+		ForceTTY(true).
 		Logger()
 
 	log = log.WithGroup("emails").With("user", "Strong Bad", "id", "12345")
@@ -283,6 +283,9 @@ func ExampleWrapErr() {
 
 	// i. logging the error
 	log.Error("", err)
+
+	// with added context
+	log.Errorf("{emails.user}", err)
 
 	// ii. wrapping the error, with no msg -> the error
 	err2 := logf.WrapErr("", err)
@@ -296,31 +299,24 @@ func ExampleWrapErr() {
 	err3 = logf.WrapErr("{emails.user}", err, log)
 	fmt.Println(err3.Error())
 
-	// iv. wrapping the error, with all available structure
-	//   - log's type is logf.Logger
-	//   - a logf.Logger is also a slog.LogValuer
-	//   - "{}" consumes log's LogValue
-	err4 := logf.WrapErr("{}", err, log)
-	fmt.Println(err4.Error())
-
 	// Output:
 	// the system is down	emails:{user:Strong Bad id:12345 err:the system is down}
+	// Strong Bad: the system is down	emails:{user:Strong Bad id:12345 err:Strong Bad: the system is down}
 	// the system is down
 	// Strong Bad: the system is down
 	// Strong Bad: the system is down
-	// [emails.user=Strong Bad emails.id=12345]: the system is down
 }
 
 func ExampleConfig_Layout() {
 	log := logf.New().
-		ForceTTY().
 		Layout("level", "attrs", "message", "tag", "\n", "source").
 		Level(logf.LevelBar).
-		Source("", logf.SourcePkg).
 		AddSource(true).
+		Source("", logf.SourcePkg).
 		Colors(false).
+		ForceTTY(true).
 		Logger().
-		Tag("rightTag")
+		With("#", "rightTag")
 
 	log.Info("Hello!", "leftAttr", "here")
 
@@ -331,7 +327,7 @@ func ExampleConfig_Layout() {
 
 func ExampleLogger_WrapErr() {
 	log := logf.New().
-		ForceTTY().
+		ForceTTY(true).
 		Colors(false).
 		Printer()
 
@@ -353,7 +349,7 @@ func ExampleLogger_WrapErr() {
 func ExampleLogger_Info() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	log = log.With("aliens", "Kang and Kodos, the Conquerors of Rigel VII")
@@ -375,7 +371,7 @@ func ExampleLogger_Info() {
 func ExampleLogger_Errorf() {
 	log := logf.New().
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
 	errNegative := errors.New("negative number")
@@ -397,9 +393,9 @@ func ExampleLogger_Errorf() {
 
 func ExampleLogger_WithGroup() {
 	log := logf.New().
-		Colors(false).
 		Layout("message", "\t", "attrs").
-		ForceTTY().
+		Colors(false).
+		ForceTTY(true).
 		Logger()
 
 	log = log.
@@ -410,18 +406,20 @@ func ExampleLogger_WithGroup() {
 	log.Infof("outer {outer.x}", "x", 3)
 	log.Infof("inner {outer.inner.x}", "x", 3)
 	log.Infof("local {outer.inner.local.x}", "x", 3)
+	log.Infof("local {x}", "x", 3)
 
 	// Output:
-	// outer 1	outer:{x:1 inner: {x:2 x:3}}}
-	// inner 2	outer:{x:1 inner: {x:2 x:3}}}
-	// local 3	outer:{x:1 inner: {x:2 x:3}}}
+	// outer 1	outer:{x:1 inner:{x:2 local:{x:3}}}
+	// inner 2	outer:{x:1 inner:{x:2 local:{x:3}}}
+	// local 3	outer:{x:1 inner:{x:2 local:{x:3}}}
+	// local 3	outer:{x:1 inner:{x:2 local:{x:3}}}
 }
 
 func ExampleLogger_With() {
 	log := logf.New().
-		Colors(false).
 		Layout("message", "attrs").
-		ForceTTY().
+		Colors(false).
+		ForceTTY(true).
 		Logger()
 
 	log = log.With("species", "gopher")
@@ -431,14 +429,15 @@ func ExampleLogger_With() {
 	// species:gopher
 }
 
-func ExampleLogger_Tag() {
+func ExampleLogger_tag() {
 	log := logf.New().
+		Layout("message", "attrs").
 		Colors(false).
-		ForceTTY().
+		ForceTTY(true).
 		Printer()
 
-	l1 := log.Tag("Log-9000")
-	l2 := l1.Tag("Log-9001")
+	l1 := log.With("#", "Log-9000")
+	l2 := l1.With("#", "Log-9001")
 
 	l1.Info("Hi!")
 	l2.Info("Plus one!")

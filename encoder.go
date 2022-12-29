@@ -1,11 +1,137 @@
 package logf
 
 import (
-	"runtime"
 	"time"
 
+	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slog"
 )
+
+// ttyFormatter manages state relevant to encoding a record to bytes
+type ttyFormatter struct {
+	layout []ttyField
+	tag    map[string]ttyEncoder[Attr]
+
+	time       ttyEncoder[time.Time]
+	level      ttyEncoder[slog.Level]
+	message    ttyEncoder[string]
+	key        ttyEncoder[string]
+	value      ttyEncoder[Value]
+	source     ttyEncoder[SourceLine]
+	groupOpen  Encoder[int]
+	groupClose Encoder[int]
+
+	groupPen pen
+	debugPen pen
+	infoPen  pen
+	warnPen  pen
+	errorPen pen
+
+	addSource bool
+}
+
+func newTTYFormatter() *ttyFormatter {
+	return &ttyFormatter{
+		// layout
+		layout: []ttyField{
+			ttyLevelField,
+			ttyTimeField,
+			ttyTagsField,
+			ttyMessageField,
+			ttyTabField,
+			ttyAttrsField,
+		},
+
+		// field encodings
+		time: ttyEncoder[time.Time]{
+			"\x1b[2m",
+			EncodeFunc(encTimeShort),
+		},
+		level: ttyEncoder[slog.Level]{
+			"",
+			EncodeFunc(encLevelBar),
+		},
+		message: ttyEncoder[string]{
+			"",
+			nil,
+		},
+		key: ttyEncoder[string]{
+			"\x1b[36;2m",
+			EncodeFunc(encKey),
+		},
+		value: ttyEncoder[Value]{
+			"\x1b[36m",
+			EncodeFunc(encValue),
+		},
+		source: ttyEncoder[SourceLine]{
+			"\x1b[2m",
+			EncodeFunc(encSourceAbs),
+		},
+		groupOpen:  EncodeFunc(encGroupOpen),
+		groupClose: EncodeFunc(encGroupClose),
+
+		// level colors
+		groupPen: "\x1b[2m",
+		debugPen: "\x1b[2m",
+		infoPen:  "\x1b[32;1m",
+		warnPen:  "\x1b[33;1m",
+		errorPen: "\x1b[31;1m",
+
+		// tags
+		tag: map[string]ttyEncoder[Attr]{
+			"#": ttyEncoder[Attr]{
+				"\x1b[35;1m",
+				EncodeFunc(encTag),
+			},
+		},
+	}
+}
+
+func (fmtr *ttyFormatter) clone(addSource, addColors bool) *ttyFormatter {
+	fmtr2 := *fmtr
+
+	// source
+	var sourceInLayout bool
+	if addSource {
+		fmtr2.addSource = true
+		for _, f := range fmtr.layout {
+			if f == ttySourceField {
+				sourceInLayout = true
+				break
+			}
+		}
+	}
+
+	if addSource && !sourceInLayout {
+		fmtr2.layout = append(fmtr2.layout, ttyNewlineField, ttySourceField)
+	}
+
+	// tags
+	fmtr2.tag = maps.Clone(fmtr.tag)
+
+	// colors
+	if !addColors {
+		fmtr2.time.color = ""
+		fmtr2.level.color = ""
+		fmtr2.message.color = ""
+		fmtr2.key.color = ""
+		fmtr2.value.color = ""
+		fmtr2.source.color = ""
+
+		fmtr2.groupPen = ""
+		fmtr2.debugPen = ""
+		fmtr2.infoPen = ""
+		fmtr2.warnPen = ""
+		fmtr2.errorPen = ""
+
+		fmtr2.tag["#"] = ttyEncoder[Attr]{
+			"",
+			EncodeFunc(encTag),
+		}
+	}
+
+	return &fmtr2
+}
 
 // ENCODERS
 
@@ -53,9 +179,6 @@ type Buffer struct {
 	sep byte
 }
 
-const sepstring = "        "
-const tabWidth = 3
-
 func (b *Buffer) writeSep() {
 	switch b.sep {
 	case 0:
@@ -97,7 +220,7 @@ func (tty *TTY) encFields(
 	src SourceLine,
 ) {
 	b := &Buffer{s, 0}
-	for _, field := range tty.fmtr.layout {
+	for _, field := range tty.dev.fmtr.layout {
 		switch field {
 		case ttyTimeField:
 			tty.encTime(b)
@@ -134,7 +257,7 @@ func (tty *TTY) encFields(
 
 func (tty *TTY) encTime(b *Buffer) {
 	b.writeSep()
-	tty.fmtr.time.Encode(b, time.Now())
+	tty.dev.fmtr.time.Encode(b, time.Now())
 	b.sep = ' '
 }
 
@@ -142,7 +265,7 @@ func (tty *TTY) encLevel(b *Buffer, level slog.Level) {
 	b.writeSep()
 	p := tty.levelPen(level)
 	p.use(b)
-	tty.fmtr.level.Encoder.Encode(b, level)
+	tty.dev.fmtr.level.Encoder.Encode(b, level)
 	p.drop(b)
 	b.sep = 0
 }
@@ -154,9 +277,9 @@ func (tty *TTY) encMsg(b *Buffer, msg string, err error) {
 
 	b.writeSep()
 
-	tty.fmtr.message.color.use(b)
+	tty.dev.fmtr.message.color.use(b)
 	b.splicer.WriteString(msg)
-	tty.fmtr.message.color.drop(b)
+	tty.dev.fmtr.message.color.drop(b)
 
 	// merge error into message
 	if err != nil {
@@ -164,15 +287,15 @@ func (tty *TTY) encMsg(b *Buffer, msg string, err error) {
 			b.WriteString(": ")
 		}
 
-		tty.fmtr.errorPen.use(b)
+		tty.dev.fmtr.errorPen.use(b)
 		b.WriteString(err.Error())
-		tty.fmtr.errorPen.drop(b)
+		tty.dev.fmtr.errorPen.drop(b)
 	}
 
 	b.sep = ' '
 }
 
-func (tty *TTY) encAttr(b *Buffer, scope string, a Attr) {
+func (tty *TTY) encAttr(b *Buffer, a Attr) {
 	if a.Key == "" {
 		return
 	}
@@ -184,25 +307,29 @@ func (tty *TTY) encAttr(b *Buffer, scope string, a Attr) {
 	}
 
 	if a.Value.Kind() == slog.GroupKind {
-		tty.encAttrGroup(b, scope, a)
+		tty.encAttrGroup(b, a)
 		return
 	}
 
 	b.writeSep()
-	tty.fmtr.key.Encode(b, a.Key)
-	tty.fmtr.value.Encode(b, a.Value)
+	tty.dev.fmtr.key.Encode(b, a.Key)
+	tty.dev.fmtr.value.Encode(b, a.Value)
 	b.sep = ' '
 }
 
-func (tty *TTY) encTag(b *Buffer, scope string, a Attr) {
+func (tty *TTY) encTag(b *Buffer, a Attr) {
+	if a.Value.Kind() == slog.LogValuerKind {
+		a.Value = a.Value.Resolve()
+	}
+
 	if a.Value.Kind() == slog.GroupKind {
-		tty.encTagGroup(b, scope, a)
+		tty.encTagGroup(b, a.Key, a)
 		return
 	}
 
 	var tag Encoder[Attr]
 	var found bool
-	if tag, found = tty.fmtr.tag[a.Key]; !found {
+	if tag, found = tty.dev.fmtr.tag[a.Key]; !found {
 		return
 	}
 
@@ -212,27 +339,13 @@ func (tty *TTY) encTag(b *Buffer, scope string, a Attr) {
 }
 
 func (tty *TTY) encSource(b *Buffer, src SourceLine) {
-	if !tty.fmtr.addSource {
+	if !tty.dev.fmtr.addSource {
 		return
 	}
 
 	b.writeSep()
-	tty.fmtr.source.Encode(b, src)
+	tty.dev.fmtr.source.Encode(b, src)
 	b.sep = ' '
-}
-
-func (tty *TTY) yankSourceLine(depth int) SourceLine {
-	if !tty.fmtr.addSource {
-		return SourceLine{}
-	}
-
-	// yank source from runtime
-	u := [1]uintptr{}
-	runtime.Callers(4+depth, u[:])
-	pc := u[0]
-	src, _ := runtime.CallersFrames([]uintptr{pc}).Next()
-
-	return SourceLine{src.File, src.Line}
 }
 
 // LISTS
@@ -245,43 +358,43 @@ func (tty *TTY) encExportAttrs(b *Buffer) {
 	if len(tty.attrText) > 0 {
 		b.writeSep()
 		b.WriteString(tty.attrText)
-		b.sep = ' '
+		b.sep = tty.attrSep
 	}
 
 	if len(b.splicer.export) > 0 {
-		tty.encListAttrs(b, tty.openKey, b.splicer.export)
+		tty.encListAttrs(b, b.splicer.export)
 		b.sep = ' '
 	}
 
-	if tty.nOpen > 0 {
-		tty.encAttrGroupClose(b, tty.nOpen)
+	if len(tty.store.scope) > 0 {
+		tty.encAttrGroupClose(b, len(tty.store.scope))
 	}
 }
 
-func (tty *TTY) encListAttrs(b *Buffer, scope string, as []Attr) {
+func (tty *TTY) encListAttrs(b *Buffer, as []Attr) {
 	for _, a := range as {
-		if tty.fmtr.sink.replace != nil {
-			a = tty.fmtr.sink.replace(a)
+		if tty.dev.replace != nil {
+			a = tty.dev.replace(nil, a)
 		}
 
 		if a.Key == "source" {
 			defer func() {
 				b.writeSep()
-				tty.fmtr.source.color.use(b)
+				tty.dev.fmtr.source.color.use(b)
 				b.WriteValue(a.Value, nil)
-				tty.fmtr.source.color.drop(b)
+				tty.dev.fmtr.source.color.drop(b)
 			}()
 			continue
 		}
 
-		tty.encAttr(b, scope, a)
+		tty.encAttr(b, a)
 	}
 }
 
 func (tty *TTY) encExportTags(b *Buffer) {
-	if tty.tag.Key == "#" {
+	if tty.label.Key == "#" {
 		b.writeSep()
-		tty.fmtr.tag["#"].Encode(b, tty.tag)
+		tty.dev.fmtr.tag["#"].Encode(b, tty.label)
 		b.sep = ' '
 	}
 
@@ -292,70 +405,68 @@ func (tty *TTY) encExportTags(b *Buffer) {
 	}
 
 	if len(b.splicer.export) > 0 {
-		tty.encListTags(b, tty.scope, b.splicer.export)
+		tty.encListTags(b, b.splicer.export)
 	}
 }
 
-func (tty *TTY) encListTags(b *Buffer, scope string, as []Attr) {
+func (tty *TTY) encListTags(b *Buffer, as []Attr) {
 	for _, a := range as {
-		if tty.fmtr.sink.replace != nil {
-			a = tty.fmtr.sink.replace(a)
+		if tty.dev.replace != nil {
+			a = tty.dev.replace(nil, a)
 		}
 
 		if a.Key == "source" {
 			defer func() {
 				b.writeSep()
-				tty.fmtr.source.color.use(b)
+				tty.dev.fmtr.source.color.use(b)
 				b.WriteValue(a.Value, nil)
-				tty.fmtr.source.color.drop(b)
+				tty.dev.fmtr.source.color.drop(b)
 			}()
 			continue
 		}
 
-		tty.encTag(b, scope, a)
+		tty.encTag(b, a)
 	}
 }
 
 // GROUPS
 
 // encodes a group with [key=val]-style text
-func (tty *TTY) encAttrGroup(b *Buffer, scope string, a Attr) {
-	group := a.Value.Group()
-	if len(group) == 0 {
-		return
-	}
-
+func (tty *TTY) encAttrGroup(b *Buffer, a Attr) {
 	b.writeSep()
 	b.sep = 0
 
-	tty.fmtr.key.color.use(b)
-	tty.fmtr.key.Encode(b, a.Key)
-	tty.fmtr.key.color.drop(b)
+	tty.dev.fmtr.key.color.use(b)
+	tty.dev.fmtr.key.Encode(b, a.Key)
+	tty.dev.fmtr.key.color.drop(b)
 
-	tty.encAttrGroupOpen(b, scope)
-	tty.encListAttrs(b, a.Key, group)
+	tty.encAttrGroupOpen(b)
+	group := a.Value.Group()
+	tty.encListAttrs(b, group)
 	tty.encAttrGroupClose(b, 1)
 }
 
-func (tty *TTY) encAttrGroupOpen(b *Buffer, scope string) {
+func (tty *TTY) encAttrGroupOpen(b *Buffer) {
 	b.writeSep()
 
-	tty.fmtr.groupPen.use(b)
-	tty.fmtr.groupOpen.Encode(b, struct{}{})
-	tty.fmtr.groupPen.drop(b)
+	tty.dev.fmtr.groupPen.use(b)
+	tty.dev.fmtr.groupOpen.Encode(b, 0)
+	tty.dev.fmtr.groupPen.drop(b)
 
 	b.sep = 0
 }
 
 func (tty *TTY) encAttrGroupClose(b *Buffer, count int) {
-	tty.fmtr.groupPen.use(b)
-	tty.fmtr.groupClose.Encode(b, count)
-	tty.fmtr.groupPen.drop(b)
+	tty.dev.fmtr.groupPen.use(b)
+	tty.dev.fmtr.groupClose.Encode(b, count)
+	tty.dev.fmtr.groupPen.drop(b)
 
 	b.sep = '?'
 }
 
 func (tty *TTY) encTagGroup(b *Buffer, scope string, a Attr) {
 	group := a.Value.Group()
-	tty.encListTags(b, a.Key, group)
+	for _, a := range group {
+		tty.encTag(b, a)
+	}
 }

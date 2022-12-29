@@ -80,17 +80,6 @@ func (l Logger) WithContext(ctx context.Context) Logger {
 	}
 }
 
-// Tag sets a unique tag on the returned Logger.
-// Unlike attributes set with [Logger.With], only one tag set by [Tag] appears in output.
-func (l Logger) Tag(name string) Logger {
-	h, ok := l.Handler().(handler)
-	if !ok {
-		return l
-	}
-
-	return newLogger(h.withTag(name))
-}
-
 // Debugf interpolates the msg string and logs at DEBUG.
 func (l Logger) Debugf(msg string, args ...any) {
 	msg = logFmt(l, msg, args)

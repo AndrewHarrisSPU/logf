@@ -39,7 +39,7 @@ func scanNext(msg string) (tail, clip string, found bool) {
 	}
 	lpos++
 
-	if tail, rpos = scanUntilRune(tail, '}'); rpos < 0 {
+	if _, rpos = scanUntilRune(tail, '}'); rpos < 0 {
 		return "", "", false
 	}
 	rpos++
@@ -173,24 +173,6 @@ func (s *splicer) ipolUntilRune(msg string, sep rune) (tail string, n int) {
 		}
 	}
 	return "", -1
-}
-
-// alternative to ipolUntilRune
-// drops escaping, but doesn't interpolate
-func (s *splicer) writeUnescape(msg string) {
-	var esc bool
-	for _, r := range msg {
-		switch {
-		case esc:
-			esc = false
-			fallthrough
-		default:
-			s.writeRune(r)
-		case r == '\\':
-			esc = true
-		}
-	}
-	return
 }
 
 func (s *splicer) ipolAttr(clip []byte) {
