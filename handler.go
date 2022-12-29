@@ -36,7 +36,7 @@ func (h *Handler) WithAttrs(as []Attr) slog.Handler {
 		replace:   h.replace,
 		addSource: h.addSource,
 	}
-	as, h2.label = detectLabel(as, h.label)
+	_, h2.label = detectLabel(as, h.label)
 
 	return h2
 }

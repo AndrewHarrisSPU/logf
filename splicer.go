@@ -114,14 +114,6 @@ func (s *splicer) line() string {
 	return string(s.text)
 }
 
-// used for adding Record attrs; doesn't match
-func (s *splicer) addAttr(a Attr, replace replaceFunc) {
-	if replace != nil {
-		a = replace(nil, a)
-	}
-	s.export = append(s.export, a)
-}
-
 // JOIN / MATCH
 func (s *splicer) joinStore(store Store, replace replaceFunc) {
 	store.Attrs(func(scope []string, a Attr) {
@@ -154,8 +146,6 @@ func (s *splicer) matchLocal(stack []string, a Attr, replace replaceFunc) {
 		for _, a := range a.Value.Group() {
 			s.match(stack, a, replace)
 		}
-
-		stack = stack[:len(stack)-1]
 	}
 }
 
@@ -182,8 +172,6 @@ func (s *splicer) match(stack []string, a Attr, replace replaceFunc) {
 		for _, a := range a.Value.Group() {
 			s.match(stack, a, replace)
 		}
-
-		stack = stack[:len(stack)-1]
 	}
 }
 

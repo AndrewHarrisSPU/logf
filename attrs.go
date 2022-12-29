@@ -3,6 +3,7 @@ package logf
 import (
 	"encoding/json"
 	"errors"
+
 	// "fmt"
 	"io"
 	"strconv"
@@ -139,29 +140,6 @@ func scopeAttrs(scope string, as []Attr, replace replaceFunc) []Attr {
 		})
 	}
 	return scoped
-}
-
-func detectTagArgs(args []any) (name string, ok bool) {
-	if len(args) < 2 {
-		return "", false
-	}
-
-	var key string
-	key, ok = args[0].(string)
-	if !ok {
-		return "", false
-	}
-
-	if key != "#" {
-		return "", false
-	}
-
-	name, ok = args[1].(string)
-	if !ok {
-		return "", false
-	}
-
-	return name, true
 }
 
 func detectLabel(as []Attr, label Attr) ([]Attr, Attr) {

@@ -47,7 +47,7 @@ func main() {
 
 	tty.SetRef(logf.DEBUG)
 
-	tty.FilterTags("euler-gopher", "fizzbuzz")
+	tty.Filter("euler-gopher", "fizzbuzz")
 
 	log := tty.
 		Logger().

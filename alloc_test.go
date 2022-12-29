@@ -64,7 +64,7 @@ func allocSplicerFunc(arg any, verb string) func() {
 	store := Store{
 		scope: []string{},
 		as: [][]Attr{
-			[]Attr{slog.Any("key", arg)},
+			{slog.Any("key", arg)},
 		},
 	}
 

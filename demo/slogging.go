@@ -25,14 +25,6 @@ func main() {
 
 	tty.SetRef(logf.DEBUG)
 
-	tty.FilterRecords(func(r slog.Record) bool {
-		var ok bool
-		r.Attrs(func(a slog.Attr) {
-			ok = ok || a.Key == "done"
-		})
-		return ok
-	})
-
 	ctx := slog.NewContext(context.Background(), slog.Default().With("place", "slogoverse"))
 	d := 5_000 * time.Millisecond
 	ctx, _ = context.WithTimeout(ctx, d)

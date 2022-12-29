@@ -29,13 +29,13 @@ func Substrings(t *testing.T) (h slog.Handler, want func(string)) {
 
 	h = slog.HandlerOptions{
 		ReplaceAttr: noTime,
-		AddSource: true,
+		AddSource:   true,
 	}.NewJSONHandler(&b)
 
 	return h, want
 }
 
-func noTime(a slog.Attr) slog.Attr {
+func noTime(scope []string, a slog.Attr) slog.Attr {
 	if a.Key == "time" {
 		a.Key = ""
 	}

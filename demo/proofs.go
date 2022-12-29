@@ -113,7 +113,7 @@ func proofs(log *logf.Logger) {
 	log.WithGroup("group")
 	log.With("key", "value")
 	log.Error("message text", errors.New("error text"))
-	log.Info("{}", logf.Group("group2", logf.Attrs("key", "value")))
+	log.Info("{}", logf.Group("group2", logf.Attrs("key", "value")...))
 }
 
 func styles() {
@@ -135,9 +135,9 @@ func styles() {
 		logf.Group("span", logf.Attrs(
 			"trace_id", "0x5b8aa5a2d2c872e8321cf37308d69df2",
 			"span_id", "0x5fb397be34d26b51",
-		)),
+		)...),
 		"parent_id", nil,
-	))
+	)...)
 
 	log.Infof("request #{http.uuid}", baggage)
 }
