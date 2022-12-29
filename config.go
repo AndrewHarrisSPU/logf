@@ -222,7 +222,7 @@ func (cfg *Config) Source(color string, enc Encoder[SourceLine]) *Config {
 // Tag configures tagging values with the given key.
 // If tagged, an [Attr]'s value appears,in the given color, in the "tags" field of the log line.
 func (cfg *Config) Tag(key string, color string) *Config {
-	tag := ttyEncoder[Attr]{newPen(color), EncodeFunc[Attr](encTag)}
+	tag := ttyEncoder[Attr]{newPen(color), EncodeFunc(encTag)}
 	cfg.fmtr.tag[key] = tag
 	return cfg
 }

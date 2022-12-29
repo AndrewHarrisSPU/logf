@@ -79,7 +79,7 @@ func newTTYFormatter() *ttyFormatter {
 
 		// tags
 		tag: map[string]ttyEncoder[Attr]{
-			"#": ttyEncoder[Attr]{
+			"#": {
 				"\x1b[35;1m",
 				EncodeFunc(encTag),
 			},
