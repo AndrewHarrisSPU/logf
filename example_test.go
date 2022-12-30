@@ -446,3 +446,33 @@ func ExampleLogger_tag() {
 	// Log-9000 Hi!
 	// Log-9001 Plus one!
 }
+
+func ExampleJSONValue() {
+	log := logf.New().
+		Layout("message", "attrs").
+		Colors(false).
+		ForceTTY(true).
+		Logger()
+
+	// object := `{"foo":"bar"}`
+	object :=
+		`{
+	"vegetables":
+		[
+			"tomato",
+			"pepper",
+			"green onion"
+		],
+	"protein":"tofu"
+}`
+
+	v, _ := logf.JSONValue(object)
+	recipe := logf.KV("recipe", v)
+
+	log.Info("", recipe)
+	log.Info(logf.Fmt("{recipe.vegetables.1}", recipe))
+
+	// Output:
+	// recipe:{vegetables:{0:tomato 1:pepper 2:green onion} protein:tofu}
+	// pepper
+}

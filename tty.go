@@ -74,8 +74,7 @@ func (w *ttySyncWriter) Write(p []byte) (n int, err error) {
 
 // ttyFilter manages some state relevant to filtering log lines
 type ttyFilter struct {
-	tag    map[string]struct{}
-	record func(slog.Record) bool
+	tag map[string]struct{}
 }
 
 // Logger returns a [Logger] that uses the [TTY] as a handler.

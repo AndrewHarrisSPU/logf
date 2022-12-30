@@ -1,14 +1,11 @@
 /*
 Package logf is a logging package extending [slog].
 
-Often, a structured logging API embeds the expectation that it isn't logging for human eyes.
-This is unambiguously a good idea in a lot of situations. Automated processing of log lines is powerful.
-
-Still, logf extends [slog] in the other direction, to be nice for human readers.
-It's an interesting problem to work out what the trade-offs are, and how to provide an opt-in API
-that allows for varying kinds of functionality here without demanding them or paying for them at runtime.
-
-Work in progress!
+Included are:
+  - terminal output tuned for human readability (and fairly configurable)
+  - quick/consolidated configuration
+  - string interpolation/formatting methods, including error wrapping
+  - a smörgåsbord of little ideas that support these things (e.g., lazy Stores, JSON -> JSONValue)
 
 # Hello, world
 

@@ -39,7 +39,7 @@ func TestStore(t *testing.T) {
 	want("store:{chordata:{duck:0 goose:1 platypus:2}}")
 }
 
-func TestDecodeJSON(t *testing.T) {
+func TestJSONValue(t *testing.T) {
 	var b bytes.Buffer
 	log := New().
 		Writer(&b).
@@ -86,12 +86,12 @@ func TestDecodeJSON(t *testing.T) {
 	}
 
 	for _, obj := range objects {
-		a, err := DecodeJSON(strings.NewReader(obj.json))
+		v, err := JSONValue(obj.json)
 		if err != nil {
 			log.Error("JSON", err)
 			continue
 		}
-		log.Info("", "object", a)
+		log.Info("", "object", v)
 		if obj.want != b.String() {
 			t.Errorf("want %s, got %s", obj.want, b.String())
 		}

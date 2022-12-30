@@ -3,9 +3,10 @@ package logf
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	// "fmt"
-	"io"
+
 	"strconv"
 
 	"golang.org/x/exp/slices"
@@ -275,8 +276,10 @@ func (store Store) WithAttrs(as []Attr) Store {
 	}
 }
 
-func DecodeJSON(r io.Reader) (Value, error) {
-	dec := json.NewDecoder(r)
+// JSONValue converst a JSON object to a [Value]. Array values are expanded
+// to attributes with a key string derived from array index (i.e., the 0th element is keyed "0").
+func JSONValue(object string) (Value, error) {
+	dec := json.NewDecoder(strings.NewReader(object))
 	dec.UseNumber()
 
 	v, err := parseValue(dec)
