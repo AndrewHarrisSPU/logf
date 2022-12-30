@@ -233,6 +233,19 @@ func (store Store) Attrs(f func([]string, Attr)) {
 	}
 }
 
+// ReplaceAttr resembles functionality seen in [slog.HandlerOptions]. Unlike [Store.Attrs], it can
+// be used to mutate attributes held in the store.
+func (store Store) ReplaceAttr(f func([]string, Attr) Attr) {
+	for depth := 0; depth <= len(store.scope); depth++ {
+		if len(store.as) == depth {
+			return
+		}
+		for i, a := range store.as[depth] {
+			store.as[depth][i] = f(store.scope[:depth], a)
+		}
+	}
+}
+
 // WithGroup opens a new group in the [Store].
 func (store Store) WithGroup(name string) Store {
 	as := slices.Clone(store.as)

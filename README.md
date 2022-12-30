@@ -2,11 +2,12 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/AndrewHarrisSPU/logf.svg)](https://pkg.go.dev/github.com/AndrewHarrisSPU/logf)
 
-## Current status:
+## Current status
 
 Core functionality seems complete.
 
 API is still being explored. Particularly:
+
 - Some nuances with expanding namespacing, Groups, and LogValuers are subtle - the behavior needs to feel right, is evolving.
 - Context and slog integration should be straightforward but hasn't been expiremented with much.
 
