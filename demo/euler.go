@@ -40,9 +40,9 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	tty := logf.New().
-		Layout("level", "tag", "message").
-		Tag("#", "dim").
-		Level(logf.LevelBullet).
+		ShowLayout("level", "tag", "message").
+		ShowTag("#", "dim").
+		ShowLevel(logf.LevelBullet).
 		TTY()
 
 	tty.SetRef(logf.DEBUG)

@@ -226,11 +226,11 @@ func encLevelBar(b *Buffer, level slog.Level) {
 	case level < INFO:
 		b.WriteString(" ▏ ")
 	case level < WARN:
-		b.WriteString("▕▎ ")
+		b.WriteString(" ▏ ")
 	case level < ERROR:
-		b.WriteString("▕▌ ")
+		b.WriteString("▕▎ ")
 	default:
-		b.WriteString("▕▊ ")
+		b.WriteString("▐▋ ")
 	}
 }
 

@@ -15,12 +15,12 @@ func main() {
 
 	tty := logf.NewDefault().
 		AddSource(true).
-		Layout("level", "time", "tags", "message", "source").
-		Time("dim", logf.TimeShort).
-		Source("dim", logf.SourceShort).
-		Tag("place", "dim magenta").
-		Tag("i", "bright magenta").
-		Tag("done", "bright magenta").
+		ShowLayout("level", "time", "tags", "message", "source").
+		ShowTime("dim", logf.TimeShort).
+		ShowSource("dim", logf.SourceShort).
+		ShowTag("place", "dim magenta").
+		ShowTag("i", "bright magenta").
+		ShowTag("done", "bright magenta").
 		TTY()
 
 	tty.SetRef(logf.DEBUG)

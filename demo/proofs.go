@@ -27,9 +27,9 @@ func logger() {
 func spacing() {
 	log := logf.New().
 		AddSource(true).
-		Time("dim", logf.TimeShort).
-		Layout("level", "time", "message", "\t", "attrs", "\t", "source").
-		Source("dim", logf.SourceShort).
+		ShowTime("dim", logf.TimeShort).
+		ShowLayout("level", "time", "message", "\t", "attrs", "\t", "source").
+		ShowSource("dim", logf.SourceShort).
 		Logger().
 		With("#", "spacing")
 
@@ -50,7 +50,7 @@ func level() {
 	defer logf.StdRef.Set(logf.INFO)
 
 	log := logf.New().
-		LevelColors("dim", "bright green", "bright yellow", "bright red").
+		ShowLevelColors("dim", "bright green", "bright yellow", "bright red").
 		Logger().
 		With("key", "value").
 		With("key2", "value2")
@@ -70,8 +70,8 @@ func levelText() {
 	defer logf.StdRef.Set(logf.INFO)
 
 	log := logf.New().
-		Level(logf.LevelText).
-		Layout("time", "level", "tags", "message", "attrs").
+		ShowLevel(logf.LevelText).
+		ShowLayout("time", "level", "tags", "message", "attrs").
 		Logger().
 		With("key", "value").
 		With("key2", "value2")
@@ -91,7 +91,7 @@ func levelMono() {
 	defer logf.StdRef.Set(logf.INFO)
 
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		Logger().
 		With("key", "value").
 		With("key2", "value2")
@@ -118,11 +118,11 @@ func proofs(log *logf.Logger) {
 
 func styles() {
 	log := logf.New().
-		Layout("level", "time", "message", "tags", "\n", "attrs").
-		Level(logf.LevelBar).
-		Time("dim", logf.TimeShort).
-		Tag("method", "bright yellow").
-		Tag("span_id", "yellow").
+		ShowLayout("level", "time", "message", "tags", "\n", "attrs").
+		ShowLevel(logf.LevelBar).
+		ShowTime("dim", logf.TimeShort).
+		ShowTag("method", "bright yellow").
+		ShowTag("span_id", "yellow").
 		Logger()
 
 	log = log.WithGroup("http")
@@ -145,7 +145,7 @@ func styles() {
 func reality() {
 	h := logf.New().
 		AddSource(true).
-		Layout("level", "time", "message", "\n", "attrs", "\n", "source").
+		ShowLayout("level", "time", "message", "\n", "attrs", "\n", "source").
 		Logger().
 		Handler()
 

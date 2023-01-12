@@ -28,9 +28,9 @@ func TestTTY(t *testing.T) {
 		return New().
 			Writer(&buf).
 			Ref(&ref).
-			Layout("level", "tags", "message", "\t", "attrs").
-			Colors(false).
-			Level(LevelText).
+			ShowLayout("level", "tags", "message", "\t", "attrs").
+			ShowColor(false).
+			ShowLevel(LevelText).
 			ForceTTY(true).
 			Logger()
 	}
@@ -71,7 +71,7 @@ func (lm logmap) LogValue() Value {
 	return GroupValue(as...)
 }
 
-const testTTYLogValuerOutput = `▕▎ value1nested
+const testTTYLogValuerOutput = ` ▏ value1nested
 `
 
 func TestTTYLogValuer(t *testing.T) {
@@ -79,8 +79,8 @@ func TestTTYLogValuer(t *testing.T) {
 
 	log := New().
 		Writer(&buf).
-		Layout("level", "tags", "message").
-		Colors(false).
+		ShowLayout("level", "tags", "message").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -120,9 +120,9 @@ func TestTTYReplace(t *testing.T) {
 			}
 			return a
 		}).
-		Layout("message", "\t", "attrs").
 		Writer(&b).
-		Colors(false).
+		ShowLayout("message", "\t", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -142,10 +142,10 @@ func TestTTYReplace(t *testing.T) {
 }
 
 const testTTYAuxOutput = `{"level":"INFO","msg":"buffer: auto"}
-▕▎ buffer: forced TTY
+ ▏ buffer: forced TTY
 {"level":"INFO","msg":"buffer: forced auxilliary"}
 {"level":"INFO","msg":"buffer: forced TTY and auxilliary"}
-▕▎ buffer: forced TTY and auxilliary
+ ▏ buffer: forced TTY and auxilliary
 `
 
 func TestTTYAux(t *testing.T) {
@@ -180,8 +180,8 @@ func TestTTYAux(t *testing.T) {
 	}
 
 	cfg := New().
-		Layout("level", "message", "attrs").
-		Colors(false).
+		ShowLayout("level", "message", "attrs").
+		ShowColor(false).
 		Writer(&b).
 		ReplaceFunc(func(scope []string, a Attr) Attr {
 			if a.Key == "time" {

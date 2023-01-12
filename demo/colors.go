@@ -12,9 +12,9 @@ func arrow(b *logf.Buffer, level logf.Level) {
 
 func main() {
 	log := logf.New().
-		Level(logf.EncodeFunc[logf.Level](arrow)).
-		LevelColors("blink italic cyan", "bright green", "bright yellow", "blink italic underline bright black bg red").
-		Message("dim").
+		ShowLevel(logf.EncodeFunc[logf.Level](arrow)).
+		ShowLevelColors("blink italic cyan", "bright green", "bright yellow", "blink italic underline bright black bg red").
+		ShowMessage("dim").
 		Logger()
 
 	log.Debug("here!")

@@ -10,8 +10,8 @@ func TestStore(t *testing.T) {
 	var b bytes.Buffer
 	log := New().
 		Writer(&b).
-		Layout("attrs").
-		Colors(false).
+		ShowLayout("attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -43,8 +43,8 @@ func TestJSONValue(t *testing.T) {
 	var b bytes.Buffer
 	log := New().
 		Writer(&b).
-		Layout("attrs").
-		Colors(false).
+		ShowLayout("attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 

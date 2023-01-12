@@ -14,18 +14,18 @@ func ExampleEncoder() {
 	}
 
 	log := logf.New().
-		Colors(false).
 		ForceTTY(true).
-		Level(logf.LevelBar).
-		Source("", logf.SourceShort).
 		AddSource(true).
-		Time("", logf.EncodeFunc(noTime)).
+		ShowColor(false).
+		ShowLevel(logf.LevelBar).
+		ShowSource("", logf.SourceShort).
+		ShowTime("", logf.EncodeFunc(noTime)).
 		Logger()
 
 	log.Info("...")
 
 	// Output:
-	// ▕▎ ??? ...
+	// ▏ ??? ...
 	//	example_test.go:25
 }
 
@@ -42,7 +42,7 @@ func (mv mapWithLogValueMethod) LogValue() logf.Value {
 
 func Example_basic() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -90,7 +90,7 @@ func ExampleFmt() {
 // Verbs appear after the ':' in `{key:verb}` strings.
 func Example_formattingVerbs() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -104,7 +104,7 @@ func Example_formattingVerbs() {
 
 func Example_interpolationArguments() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -130,8 +130,8 @@ func Example_interpolationArguments() {
 
 func Example_interpolationArgumentsMixed() {
 	log := logf.New().
-		Colors(false).
-		Layout("message", "\t", "attrs").
+		ShowColor(false).
+		ShowLayout("message", "\t", "attrs").
 		ForceTTY(true).
 		Logger()
 
@@ -146,7 +146,7 @@ func Example_interpolationArgumentsMixed() {
 // Interpolation can require escaping of '{', '}', and ':'
 func Example_interpolationEscapes() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -179,7 +179,7 @@ func Example_interpolationEscapes() {
 // See [Config.TimeFormat] for formatting of [TTY] time fields.
 func Example_interpolationTimeVerbs() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -190,7 +190,7 @@ func Example_interpolationTimeVerbs() {
 	log.Infof("timestamp {:stamp}", time.Time{})
 	log.Infof("epoch {:epoch}", time.Time{})
 
-	// custom formatting uses strings like time.Layout, using a semicolon rather than ':'
+	// custom formatting uses strings like time.ShowLayout, using a semicolon rather than ':'
 	log.Infof("custom {:15;03;04}", time.Time{})
 
 	log.Infof("duration interpolation formatting:")
@@ -214,7 +214,7 @@ func Example_interpolationTimeVerbs() {
 // Interpolation of [slog.LogValuer]s is powerful, but can be subtle.
 func Example_interpolationLogValuer() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -241,8 +241,8 @@ func Example_interpolationLogValuer() {
 // For convenience, logf aliases or reimplements some [slog.Attr]-forming functions.
 func Example_structure() {
 	log := logf.New().
-		Layout("message", "\t", "attrs").
-		Colors(false).
+		ShowLayout("message", "\t", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -273,8 +273,8 @@ func Example_structure() {
 // Logging, wrapping, and bubbling errors are all possible
 func ExampleWrapErr() {
 	log := logf.New().
-		Layout("message", "\t", "attrs").
-		Colors(false).
+		ShowLayout("message", "\t", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -307,13 +307,13 @@ func ExampleWrapErr() {
 	// Strong Bad: the system is down
 }
 
-func ExampleConfig_Layout() {
+func ExampleConfig_ShowLayout() {
 	log := logf.New().
-		Layout("level", "attrs", "message", "tag", "\n", "source").
-		Level(logf.LevelBar).
+		ShowLayout("level", "attrs", "message", "tag", "\n", "source").
+		ShowLevel(logf.LevelBar).
+		ShowSource("", logf.SourcePkg).
+		ShowColor(false).
 		AddSource(true).
-		Source("", logf.SourcePkg).
-		Colors(false).
 		ForceTTY(true).
 		Logger().
 		With("#", "rightTag")
@@ -321,14 +321,14 @@ func ExampleConfig_Layout() {
 	log.Info("Hello!", "leftAttr", "here")
 
 	// Output:
-	// ▕▎ leftAttr:here Hello! rightTag
+	// ▏ leftAttr:here Hello! rightTag
 	// 	logf
 }
 
 func ExampleLogger_WrapErr() {
 	log := logf.New().
+		ShowColor(false).
 		ForceTTY(true).
-		Colors(false).
 		Printer()
 
 	log = log.With("flavor", "coconut")
@@ -348,7 +348,7 @@ func ExampleLogger_WrapErr() {
 
 func ExampleLogger_Info() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -370,7 +370,7 @@ func ExampleLogger_Info() {
 
 func ExampleLogger_Errorf() {
 	log := logf.New().
-		Colors(false).
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -393,8 +393,8 @@ func ExampleLogger_Errorf() {
 
 func ExampleLogger_WithGroup() {
 	log := logf.New().
-		Layout("message", "\t", "attrs").
-		Colors(false).
+		ShowLayout("message", "\t", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -417,8 +417,8 @@ func ExampleLogger_WithGroup() {
 
 func ExampleLogger_With() {
 	log := logf.New().
-		Layout("message", "attrs").
-		Colors(false).
+		ShowLayout("message", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
@@ -431,8 +431,8 @@ func ExampleLogger_With() {
 
 func ExampleLogger_tag() {
 	log := logf.New().
-		Layout("message", "attrs").
-		Colors(false).
+		ShowLayout("message", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Printer()
 
@@ -449,12 +449,11 @@ func ExampleLogger_tag() {
 
 func ExampleJSONValue() {
 	log := logf.New().
-		Layout("message", "attrs").
-		Colors(false).
+		ShowLayout("message", "attrs").
+		ShowColor(false).
 		ForceTTY(true).
 		Logger()
 
-	// object := `{"foo":"bar"}`
 	object :=
 		`{
 	"vegetables":

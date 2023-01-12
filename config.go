@@ -14,16 +14,6 @@ var StdRef slog.LevelVar
 
 var stdMutex sync.Mutex
 
-// func writerIsTerminal(w io.Writer) bool {
-// 	file, isFile := w.(*os.File)
-// 	if !isFile {
-// 		return false
-// 	}
-
-// 	stat, _ := file.Stat()
-// 	return (stat.Mode() & os.ModeCharDevice) == os.ModeCharDevice
-// }
-
 // CONFIG
 
 // Config is a base type for [Logger] and [TTY] configuration.
@@ -31,7 +21,7 @@ var stdMutex sync.Mutex
 // To construct a [Logger] with an already extant [slog.Handler], see [UsingHandler].
 //
 // If a [TTY] would employ a Writer that isn't a terminal, Config methods result in a [slog.JSONHandler]-based [Logger],
-// unless [Config.ForceTTY] is set.
+// unless [Config.ForceTTY] is set. [Config.Aux] is available for additional configuration of auxilliary logging.
 //
 // # Typical usage
 //
@@ -46,21 +36,23 @@ var stdMutex sync.Mutex
 //   - [Config.ReplaceFunc]: nil
 //
 // Methods applying only to a [TTY], or a logger based on one, and default arguments:
-//   - [Config.Layout]: "level", "time", "tags", "message", "\t", "attrs"
-//   - [Config.Colors]: true
+//   - [Config.Aux]: none
+//   - [Config.ForceAux]: false
 //   - [Config.ForceTTY]: false
 //
-// Methods configured [TTY] encoding:
-//   - [Config.Level]: LevelBar
-//   - [Config.LevelColors]: "bright cyan", "bright green", "bright yellow", "bright red"
-//   - [Config.Time]: "dim", TimeShort
-//   - [Config.Tag]: "#", "bright magenta"
-//   - [Config.TagEncode]: nil
-//   - [Config.Message]: ""
-//   - [Config.AttrKey]: "dim cyan"
-//   - [Config.AttrValue]: "cyan"
-//   - [Config.Group]: "dim"
-//   - [Config.Source]: "dim", SourceAbs
+// Methods configuring the color and encoding of [TTY] fields:
+//   - [Config.ShowAttrKey]
+//   - [Config.ShowAttrValue]
+//   - [Config.ShowColor]: true
+//   - [Config.ShowGroup]: "dim"
+//   - [Config.ShowLayout]: "level", "time", "tags", "message", "\t", "attrs"
+//   - [Config.ShowLevel]: LevelBar
+//   - [Config.ShowLevelColors]: "bright cyan", "bright green", "bright yellow", "bright red"
+//   - [Config.ShowMessage]: ""
+//   - [Config.ShowSource]: "dim", SourceAbs
+//   - [Config.ShowTag]: "#", "bright magenta"
+//   - [Config.ShowTagEncode]: nil
+//   - [Config.ShowTime]: "dim", TimeShort
 //
 // 3. A Config method returning a [Logger] or a [TTY] closes the chained invocation:
 //   - [Config.TTY] returns a [TTY]
@@ -130,14 +122,14 @@ func (cfg *Config) Writer(w io.Writer) *Config {
 // Colors toggles [TTY] color encoding, using ANSI escape codes.
 //
 // TODO: support cygwin escape codes.
-func (cfg *Config) Colors(toggle bool) *Config {
+func (cfg *Config) ShowColor(toggle bool) *Config {
 	cfg.addColors = toggle
 	return cfg
 }
 
-// Time sets a color and an encoder for the [slog.Record.Time] field.
+// ShowTime sets a color and an encoder for the [slog.Record.Time] field.
 // If the enc argument is nil, the configuration uses the [TimeShort] function.
-func (cfg *Config) Time(color string, enc Encoder[time.Time]) *Config {
+func (cfg *Config) ShowTime(color string, enc Encoder[time.Time]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encTimeShort)
 	}
@@ -145,9 +137,9 @@ func (cfg *Config) Time(color string, enc Encoder[time.Time]) *Config {
 	return cfg
 }
 
-// Level sets an encoder for the [slog.Record.Level] field.
+// ShowLevel sets an encoder for the [slog.Record.Level] field.
 // If the enc argument is nil, the configuration uses the [LevelBar] function.
-func (cfg *Config) Level(enc Encoder[slog.Level]) *Config {
+func (cfg *Config) ShowLevel(enc Encoder[slog.Level]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encLevelBar)
 	}
@@ -155,9 +147,9 @@ func (cfg *Config) Level(enc Encoder[slog.Level]) *Config {
 	return cfg
 }
 
-// LevelColors configures four colors for DEBUG, INFO, WARN, and ERROR levels.
+// ShowLevelColors configures four colors for DEBUG, INFO, WARN, and ERROR levels.
 // These colors are used when a [slog.Record.Level] is encoded.
-func (cfg *Config) LevelColors(debug string, info string, warn string, error string) *Config {
+func (cfg *Config) ShowLevelColors(debug string, info string, warn string, error string) *Config {
 	cfg.fmtr.debugPen = newPen(debug)
 	cfg.fmtr.infoPen = newPen(info)
 	cfg.fmtr.warnPen = newPen(warn)
@@ -165,16 +157,16 @@ func (cfg *Config) LevelColors(debug string, info string, warn string, error str
 	return cfg
 }
 
-// Message sets a color for the [slog.Record.Message] field.
-func (cfg *Config) Message(color string) *Config {
+// ShowMessage sets a color for the [slog.Record.Message] field.
+func (cfg *Config) ShowMessage(color string) *Config {
 	cfg.fmtr.message = ttyEncoder[string]{newPen(color), nil}
 	return cfg
 }
 
-// AttrKey sets a color and an encoder for [slog.Attr.Key] encoding.
+// ShowAttrKey sets a color and an encoder for [slog.Attr.Key] encoding.
 // If the enc argument is nil, the configuration uses an [Encoder] that simply writes the [slog.Attr.Key].
 // TODO: this default does no escaping. Perhaps JSON quoting and escaping would be useful.
-func (cfg *Config) AttrKey(color string, enc Encoder[string]) *Config {
+func (cfg *Config) ShowAttrKey(color string, enc Encoder[string]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encKey)
 	}
@@ -182,10 +174,10 @@ func (cfg *Config) AttrKey(color string, enc Encoder[string]) *Config {
 	return cfg
 }
 
-// AttrValue sets a color and an encoder for [slog.Attr.Value] encoding.
+// ShowAttrValue sets a color and an encoder for [slog.Attr.Value] encoding.
 // If the enc argument is nil, the configuration uses an default [Encoder].
 // TODO: this default does no escaping. Perhaps JSON quoting and escaping would be useful.
-func (cfg *Config) AttrValue(color string, enc Encoder[Value]) *Config {
+func (cfg *Config) ShowAttrValue(color string, enc Encoder[Value]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encValue)
 	}
@@ -193,9 +185,9 @@ func (cfg *Config) AttrValue(color string, enc Encoder[Value]) *Config {
 	return cfg
 }
 
-// Group sets a color and a pair of encoders for opening and closing groups.
+// ShowGroup sets a color and a pair of encoders for opening and closing groups.
 // If the open or close arguments are nil, [Encoder]s that write "{" or "}" tokens are used.
-func (cfg *Config) Group(color string, open Encoder[int], close Encoder[int]) *Config {
+func (cfg *Config) ShowGroup(color string, open Encoder[int], close Encoder[int]) *Config {
 	cfg.fmtr.groupPen = newPen(color)
 	if open == nil {
 		open = EncodeFunc(encGroupOpen)
@@ -208,10 +200,10 @@ func (cfg *Config) Group(color string, open Encoder[int], close Encoder[int]) *C
 	return cfg
 }
 
-// Source sets a color and an encoder for [SourceLine] encoding.
+// ShowSource sets a color and an encoder for [SourceLine] encoding.
 // If the enc argument is nil, the configuration uses the [SourceAbs] function.
 // Configurations must set [Config.AddSource] to output source annotations.
-func (cfg *Config) Source(color string, enc Encoder[SourceLine]) *Config {
+func (cfg *Config) ShowSource(color string, enc Encoder[SourceLine]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encSourceAbs)
 	}
@@ -219,17 +211,17 @@ func (cfg *Config) Source(color string, enc Encoder[SourceLine]) *Config {
 	return cfg
 }
 
-// Tag configures tagging values with the given key.
+// ShowTag configures tagging values with the given key.
 // If tagged, an [Attr]'s value appears,in the given color, in the "tags" field of the log line.
-func (cfg *Config) Tag(key string, color string) *Config {
+func (cfg *Config) ShowTag(key string, color string) *Config {
 	tag := ttyEncoder[Attr]{newPen(color), EncodeFunc(encTag)}
 	cfg.fmtr.tag[key] = tag
 	return cfg
 }
 
-// Tag configures tagging values with the given key.
+// ShowTag configures tagging values with the given key.
 // If tagged, an [Attr] appears, in the given color, encoded by the provided [Encoder], in the "tags" field of the log line.
-func (cfg *Config) TagEncode(key string, color string, enc Encoder[Attr]) *Config {
+func (cfg *Config) ShowTagEncode(key string, color string, enc Encoder[Attr]) *Config {
 	tag := ttyEncoder[Attr]{newPen(color), enc}
 	cfg.fmtr.tag[key] = tag
 	return cfg
@@ -241,9 +233,9 @@ func (cfg *Config) AddSource(toggle bool) *Config {
 	return cfg
 }
 
-// Layout configures the fields encoded in a [TTY] log line.
+// ShowLayout configures the fields encoded in a [TTY] log line.
 //
-// Layout recognizes the following strings (and ignores others):
+// ShowLayout recognizes the following strings (and ignores others):
 //
 // Log fields:
 //   - "time"
@@ -259,7 +251,7 @@ func (cfg *Config) AddSource(toggle bool) *Config {
 //   - "\t"
 //
 // If [Config.AddSource] is configured, source information is the last field encoded in a log line.
-func (cfg *Config) Layout(fields ...string) *Config {
+func (cfg *Config) ShowLayout(fields ...string) *Config {
 	cfg.fmtr.layout = cfg.fmtr.layout[:0]
 
 	var f ttyField
@@ -416,7 +408,7 @@ func (cfg *Config) Logger() Logger {
 // Otherwise, the returned [Logger] a JSONHandler]-based
 func (cfg *Config) Printer() Logger {
 	tty := cfg.
-		Layout("tags", "message").
+		ShowLayout("tags", "message").
 		TTY()
 	return newLogger(tty)
 }
