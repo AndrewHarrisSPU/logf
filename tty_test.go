@@ -199,6 +199,6 @@ func TestTTYAux(t *testing.T) {
 	if want != got {
 		t.Log(want)
 		t.Log(got)
-		t.Error("TTY Aux")
+		t.Error("TTY aux")
 	}
 }
