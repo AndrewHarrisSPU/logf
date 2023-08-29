@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // COLORS / STYLES
@@ -164,13 +164,13 @@ var (
 	TimeRFC3339Nano Encoder[time.Time]
 
 	// absolute source file path, plus line number
-	SourceAbs Encoder[SourceLine]
+	SourceAbs Encoder[*slog.Source]
 
 	// just file:line
-	SourceShort Encoder[SourceLine]
+	SourceShort Encoder[*slog.Source]
 
 	// just the package
-	SourcePkg Encoder[SourceLine]
+	SourcePkg Encoder[*slog.Source]
 )
 
 func encGroupOpen(b *Buffer, count int) {
@@ -242,24 +242,17 @@ func encTimeRFC3339Nano(b *Buffer, t time.Time) {
 	b.WriteString(t.Format(time.RFC3339Nano))
 }
 
-// SourceLine is the carrier of information for source annotation [Encoder]s.
-// If source annotations aren't configured, File and Line may be "", 0
-type SourceLine struct {
-	File string
-	Line int
-}
-
-func encSourcePkg(b *Buffer, src SourceLine) {
+func encSourcePkg(b *Buffer, src *slog.Source) {
 	b.WriteString(filepath.Base(filepath.Dir(src.File)))
 }
 
-func encSourceShort(b *Buffer, src SourceLine) {
+func encSourceShort(b *Buffer, src *slog.Source) {
 	b.WriteString(filepath.Base(src.File))
 	b.WriteString(":")
 	b.WriteString(strconv.Itoa(src.Line))
 }
 
-func encSourceAbs(b *Buffer, src SourceLine) {
+func encSourceAbs(b *Buffer, src *slog.Source) {
 	b.WriteString(src.File)
 	b.WriteString(":")
 	b.WriteString(strconv.Itoa(src.Line))

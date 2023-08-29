@@ -3,8 +3,8 @@ package logf
 import (
 	"time"
 
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slog"
+	"log/slog"
+	"maps"
 )
 
 // ttyFormatter manages state relevant to encoding a record to bytes
@@ -17,7 +17,7 @@ type ttyFormatter struct {
 	message    ttyEncoder[string]
 	key        ttyEncoder[string]
 	value      ttyEncoder[Value]
-	source     ttyEncoder[SourceLine]
+	source     ttyEncoder[*slog.Source]
 	groupOpen  Encoder[int]
 	groupClose Encoder[int]
 
@@ -63,7 +63,7 @@ func newTTYFormatter() *ttyFormatter {
 			"\x1b[36m",
 			EncodeFunc(encValue),
 		},
-		source: ttyEncoder[SourceLine]{
+		source: ttyEncoder[*slog.Source]{
 			"\x1b[2m",
 			EncodeFunc(encSourceAbs),
 		},
@@ -144,7 +144,7 @@ func (fmtr *ttyFormatter) clone(addSource, addColors bool) *ttyFormatter {
 //   - tag: Encoder[Attr]
 //   - attr key: Encoder[string]
 //   - attr value: Encoder[Value]
-//   - source: Encoder[SourceLine]
+//   - source: Encoder[*slog.Source]
 type Encoder[T any] interface {
 	Encode(*Buffer, T)
 }
@@ -217,7 +217,7 @@ func (tty *TTY) encFields(
 	level slog.Level,
 	msg string,
 	err error,
-	src SourceLine,
+	src *slog.Source,
 ) {
 	b := &Buffer{s, 0}
 	for _, field := range tty.dev.fmtr.layout {
@@ -300,13 +300,13 @@ func (tty *TTY) encAttr(b *Buffer, a Attr) {
 		return
 	}
 
-	if a.Value.Kind() == slog.LogValuerKind {
+	if a.Value.Kind() == slog.KindLogValuer {
 		if lv, ok := a.Value.Any().(slog.LogValuer); ok {
 			a.Value = lv.LogValue().Resolve()
 		}
 	}
 
-	if a.Value.Kind() == slog.GroupKind {
+	if a.Value.Kind() == slog.KindGroup {
 		tty.encAttrGroup(b, a)
 		return
 	}
@@ -318,11 +318,11 @@ func (tty *TTY) encAttr(b *Buffer, a Attr) {
 }
 
 func (tty *TTY) encTag(b *Buffer, a Attr) {
-	if a.Value.Kind() == slog.LogValuerKind {
+	if a.Value.Kind() == slog.KindLogValuer {
 		a.Value = a.Value.Resolve()
 	}
 
-	if a.Value.Kind() == slog.GroupKind {
+	if a.Value.Kind() == slog.KindGroup {
 		tty.encTagGroup(b, a.Key, a)
 		return
 	}
@@ -338,7 +338,7 @@ func (tty *TTY) encTag(b *Buffer, a Attr) {
 	b.sep = ' '
 }
 
-func (tty *TTY) encSource(b *Buffer, src SourceLine) {
+func (tty *TTY) encSource(b *Buffer, src *slog.Source) {
 	if !tty.dev.fmtr.addSource {
 		return
 	}

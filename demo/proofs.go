@@ -2,10 +2,10 @@ package main
 
 import (
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/AndrewHarrisSPU/logf"
-	"golang.org/x/exp/slog"
 )
 
 func main() {
@@ -16,6 +16,7 @@ func main() {
 	spacing()
 	reality()
 	styles()
+	faux()
 }
 
 func logger() {
@@ -113,7 +114,7 @@ func proofs(log *logf.Logger) {
 	log.WithGroup("group")
 	log.With("key", "value")
 	log.Error("message text", errors.New("error text"))
-	log.Info("{}", logf.Group("group2", logf.Attrs("key", "value")...))
+	log.Info("{}", logf.Group("group2", "key", "value"))
 }
 
 func styles() {
@@ -131,13 +132,13 @@ func styles() {
 
 	log.Info("a request")
 
-	baggage := logf.Group("otel", logf.Attrs(
-		logf.Group("span", logf.Attrs(
+	baggage := logf.Group("req",
+		logf.Group("span",
 			"trace_id", "0x5b8aa5a2d2c872e8321cf37308d69df2",
 			"span_id", "0x5fb397be34d26b51",
-		)...),
+		),
 		"parent_id", nil,
-	)...)
+	)
 
 	log.Infof("request #{http.uuid}", baggage)
 }
@@ -157,6 +158,15 @@ func reality() {
 	}
 
 	log.Info(TestMessage, args...)
+}
+
+func faux() {
+	tty := logf.New().
+		ForceAux(true).
+		TTY()
+
+	log := tty.Logger()
+	log.Info("aux")
 }
 
 const TestMessage = "Test logging, but use a somewhat realistic message length."

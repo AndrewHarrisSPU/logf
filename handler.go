@@ -1,7 +1,8 @@
 package logf
 
 import (
-	"golang.org/x/exp/slog"
+	"context"
+	"log/slog"
 )
 
 // handler minor
@@ -21,12 +22,12 @@ type Handler struct {
 	addSource bool
 }
 
-func (h *Handler) Enabled(l slog.Level) bool {
-	return h.enc.Enabled(l)
+func (h *Handler) Enabled(ctx context.Context, l slog.Level) bool {
+	return h.enc.Enabled(ctx, l)
 }
 
-func (h *Handler) Handle(r slog.Record) error {
-	return h.enc.Handle(r)
+func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
+	return h.enc.Handle(ctx, r)
 }
 
 func (h *Handler) WithAttrs(as []Attr) slog.Handler {

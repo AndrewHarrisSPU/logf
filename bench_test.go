@@ -3,11 +3,163 @@ package logf
 import (
 	"errors"
 	"io"
+	"os"
 	"testing"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
+
+var log func() *slog.Logger = func() *slog.Logger {
+	globalGroupLog = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	return globalGroupLog
+}
+
+var globalGroupLog *slog.Logger
+
+var globalAs []Attr
+var globalGroup slog.Attr
+
+func BenchmarkAttrsFunc(b *testing.B) {
+	log := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		// log.Info("", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p")
+		log.LogAttrs(nil, slog.LevelInfo, "", Attrs("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p")...)
+	}
+}
+
+const badKey = "!BADKEY"
+
+func argsToAttr(args []any) (Attr, []any) {
+	switch x := args[0].(type) {
+	case string:
+		if len(args) == 1 {
+			return slog.String(badKey, x), nil
+		}
+		a := slog.Any(x, args[1])
+		a.Value = a.Value.Resolve()
+		return a, args[2:]
+
+	case Attr:
+		x.Value = x.Value.Resolve()
+		return x, args[1:]
+
+	default:
+		return slog.Any(badKey, x), args[1:]
+	}
+}
+
+func groupAny(name string, args ...any) Attr {
+	as := make([]Attr, 0, len(args))
+	var a Attr
+	for len(args) > 0 {
+		a, args = argsToAttr(args)
+		as = append(as, a)
+	}
+	return Attr{name, slog.GroupValue(as...)}
+}
+
+func AttrsFunc(args ...any) []Attr {
+	as := make([]Attr, 0, len(args))
+	var a Attr
+	for len(args) > 0 {
+		a, args = argsToAttr(args)
+		as = append(as, a)
+	}
+	return as
+}
+
+func list(args ...any) slog.Value {
+	as := make([]Attr, 0, len(args))
+	var a Attr
+	for len(args) > 0 {
+		a, args = argsToAttr(args)
+		as = append(as, a)
+	}
+	return slog.GroupValue(as...)
+}
+
+func BenchmarkGroupAnyV1(b *testing.B) {
+	var g slog.Attr
+	b.ReportAllocs()
+	for i := 0; i < 5; i++ {
+		// g := slog.Group("g", TestListAttr...)
+		g = slog.Group("g", []any{slog.String("a", "b"), slog.String("c", "d")}...)
+		globalGroup = g
+	}
+
+	log().Info("", globalGroup)
+
+	// if globalGroup.Value.Group()[0].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+
+	// if globalGroup.Value.Group()[5].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+}
+
+func BenchmarkGroupAnyV2(b *testing.B) {
+	var g slog.Attr
+	b.ReportAllocs()
+	for i := 0; i < 5; i++ {
+		// g := groupAny("g", TestListAny40...)
+		g = groupAny("g", "a", "b", "c", "d")
+		globalGroup = g
+	}
+
+	log().Info("", globalGroup)
+
+	// if globalGroup.Value.Group()[0].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+
+	// if globalGroup.Value.Group()[5].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+}
+
+func BenchmarkGroupAnyV3(b *testing.B) {
+	var g slog.Attr
+	b.ReportAllocs()
+	for i := 0; i < 5; i++ {
+		// g := slog.Group("g", AttrsFunc(TestListAny40...)...)
+		g = slog.Group("g", []any{"a", "b", "c", "d"}...)
+		globalGroup = g
+	}
+
+	log().Info("", globalGroup)
+
+	// if globalGroup.Value.Group()[0].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+
+	// if globalGroup.Value.Group()[5].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+}
+
+func BenchmarkGroupAnyV4(b *testing.B) {
+	var g slog.Attr
+	b.ReportAllocs()
+	for i := 0; i < 5; i++ {
+		// g := slog.Group("g", AttrsFunc(TestListAny40...)...)
+		g = slog.Attr{"g", list("a", "b", "c", "d")}
+		globalGroup = g
+	}
+
+	log().Info("", globalGroup)
+
+	// if globalGroup.Value.Group()[0].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+
+	// if globalGroup.Value.Group()[5].Value.String() != TestString {
+	// 	panic(globalGroup)
+	// }
+}
 
 func BenchmarkLoggerSize(b *testing.B) {
 	b.Run("logf manual", benchLogfInitManual)
@@ -29,7 +181,7 @@ func benchLogfInitManual(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		h := &Handler{
 			// attrs:     make([]Attr, 0),
-			enc:       slog.NewJSONHandler(io.Discard),
+			enc:       slog.NewJSONHandler(io.Discard, nil),
 			addSource: false,
 		}
 		globalLog = newLogger(h)
@@ -48,7 +200,7 @@ func benchLogfInit(b *testing.B) {
 func benchSlogInit(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		globalSlog = slog.New(slog.NewTextHandler(io.Discard))
+		globalSlog = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 }
 
@@ -85,21 +237,21 @@ func benchLogfWith40(b *testing.B) {
 func benchSlogWith5(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny5...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard, nil)).With(TestAny5...)
 	}
 }
 
 func benchSlogWith10(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny10...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard, nil)).With(TestAny10...)
 	}
 }
 
 func benchSlogWith40(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_ = slog.New(slog.NewJSONHandler(io.Discard)).With(TestAny40...)
+		_ = slog.New(slog.NewJSONHandler(io.Discard, nil)).With(TestAny40...)
 	}
 }
 
@@ -110,8 +262,8 @@ func BenchmarkAttrs(b *testing.B) {
 	}{
 		// {"async discard", newAsyncHandler()},
 		// {"fastText discard", newFastTextHandler(io.Discard)},
-		{"Text discard", slog.NewTextHandler(io.Discard)},
-		{"JSON discard", slog.HandlerOptions{AddSource: false}.NewJSONHandler(io.Discard)},
+		{"Text discard", slog.NewTextHandler(io.Discard, &slog.HandlerOptions{AddSource: false})},
+		{"JSON discard", slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{AddSource: false})},
 		{"logf discard", New().Writer(io.Discard).JSON().Handler().(handler)},
 	} {
 		logger := slog.New(handler.h)
@@ -123,7 +275,7 @@ func BenchmarkAttrs(b *testing.B) {
 				{
 					"0 args",
 					func() {
-						logger.LogAttrs(slog.InfoLevel, TestMessage)
+						logger.LogAttrs(nil, slog.LevelInfo, TestMessage)
 					},
 				},
 				{
@@ -133,7 +285,7 @@ func BenchmarkAttrs(b *testing.B) {
 					// should only be from Duration.String and Time.String.
 					"5 args",
 					func() {
-						logger.LogAttrs(slog.InfoLevel, TestMessage,
+						logger.LogAttrs(nil, slog.LevelInfo, TestMessage,
 							slog.String("string", TestString),
 							slog.Int("status", TestInt),
 							slog.Duration("duration", TestDuration),
@@ -145,7 +297,7 @@ func BenchmarkAttrs(b *testing.B) {
 				{
 					"10 args",
 					func() {
-						logger.LogAttrs(slog.InfoLevel, TestMessage,
+						logger.LogAttrs(nil, slog.LevelInfo, TestMessage,
 							slog.String("string", TestString),
 							slog.Int("status", TestInt),
 							slog.Duration("duration", TestDuration),
@@ -162,7 +314,7 @@ func BenchmarkAttrs(b *testing.B) {
 				{
 					"40 args",
 					func() {
-						logger.LogAttrs(slog.InfoLevel, TestMessage,
+						logger.LogAttrs(nil, slog.LevelInfo, TestMessage,
 							slog.String("string", TestString),
 							slog.Int("status", TestInt),
 							slog.Duration("duration", TestDuration),
@@ -299,7 +451,7 @@ func BenchmarkInterpolation(b *testing.B) {
 	log10 := log.With(TestAny10...)
 	log40 := log.With(TestAny40...)
 
-	slogger := slog.New(slog.NewJSONHandler(w))
+	slogger := slog.New(slog.NewJSONHandler(w, nil))
 	slogger5 := slogger.With(TestAny5...)
 	slogger40 := slogger.With(TestAny40...)
 
@@ -442,6 +594,115 @@ var TestAny10 = []any{
 	slog.Any("error2", TestError),
 }
 
+var TestListAttr = []Attr{
+	slog.String("string", TestString),
+	slog.Int("status", TestInt),
+	slog.Duration("duration", TestDuration),
+	slog.Time("time", TestTime),
+	slog.Any("error", TestError),
+	slog.String("string2", TestString),
+	slog.Int("status2", TestInt),
+	slog.Duration("duration2", TestDuration),
+	slog.Time("time2", TestTime),
+	slog.Any("error2", TestError),
+}
+
+var TestListAny = []any{
+	"string", TestString,
+	"status", TestInt,
+	"duration", TestDuration,
+	"time", TestTime,
+	"error", TestError,
+	"string2", TestString,
+	"status2", TestInt,
+	"duration2", TestDuration,
+	"time2", TestTime,
+	"error2", TestError,
+}
+var TestListAny40 = []any{
+	"string", TestString,
+	"status", TestInt,
+	"duration", TestDuration,
+	"time", TestTime,
+	"error", TestError,
+	"string2", TestString,
+	"status2", TestInt,
+	"duration2", TestDuration,
+	"time2", TestTime,
+	"error2", TestError,
+	"string", TestString,
+	"status", TestInt,
+	"duration", TestDuration,
+	"time", TestTime,
+	"error", TestError,
+	"string2", TestString,
+	"status2", TestInt,
+	"duration2", TestDuration,
+	"time2", TestTime,
+	"error2", TestError,
+	"string", TestString,
+	"status", TestInt,
+	"duration", TestDuration,
+	"time", TestTime,
+	"error", TestError,
+	"string2", TestString,
+	"status2", TestInt,
+	"duration2", TestDuration,
+	"time2", TestTime,
+	"error2", TestError,
+	"string", TestString,
+	"status", TestInt,
+	"duration", TestDuration,
+	"time", TestTime,
+	"error", TestError,
+	"string2", TestString,
+	"status2", TestInt,
+	"duration2", TestDuration,
+	"time2", TestTime,
+	"error2", TestError,
+}
+var TestListAttr40 = []Attr{
+	slog.String("string", TestString),
+	slog.Int("status", TestInt),
+	slog.Duration("duration", TestDuration),
+	slog.Time("time", TestTime),
+	slog.Any("error", TestError),
+	slog.String("string2", TestString),
+	slog.Int("status2", TestInt),
+	slog.Duration("duration2", TestDuration),
+	slog.Time("time2", TestTime),
+	slog.Any("error2", TestError),
+	slog.String("string", TestString),
+	slog.Int("status", TestInt),
+	slog.Duration("duration", TestDuration),
+	slog.Time("time", TestTime),
+	slog.Any("error", TestError),
+	slog.String("string2", TestString),
+	slog.Int("status2", TestInt),
+	slog.Duration("duration2", TestDuration),
+	slog.Time("time2", TestTime),
+	slog.Any("error2", TestError),
+	slog.String("string", TestString),
+	slog.Int("status", TestInt),
+	slog.Duration("duration", TestDuration),
+	slog.Time("time", TestTime),
+	slog.Any("error", TestError),
+	slog.String("string2", TestString),
+	slog.Int("status2", TestInt),
+	slog.Duration("duration2", TestDuration),
+	slog.Time("time2", TestTime),
+	slog.Any("error2", TestError),
+	slog.String("string", TestString),
+	slog.Int("status", TestInt),
+	slog.Duration("duration", TestDuration),
+	slog.Time("time", TestTime),
+	slog.Any("error", TestError),
+	slog.String("string2", TestString),
+	slog.Int("status2", TestInt),
+	slog.Duration("duration2", TestDuration),
+	slog.Time("time2", TestTime),
+	slog.Any("error2", TestError),
+}
 var TestAny40 = []any{
 	slog.String("1", TestString),
 	slog.Int("11", TestInt),

@@ -200,12 +200,12 @@ func Example_interpolationTimeVerbs() {
 
 	// Output:
 	// time interpolation formatting:
-	// no verb 1754-08-30T22:43:41.128Z
-	// RFC3339 1754-08-30T22:43:41Z
-	// kitchen 10:43PM
-	// timestamp Aug 30 22:43:41
-	// epoch -6795364579
-	// custom 22:10:43
+	// no verb 0001-01-01T00:00:00.000Z
+	// RFC3339 0001-01-01T00:00:00Z
+	// kitchen 12:00AM
+	// timestamp Jan  1 00:00:00
+	// epoch -62135596800
+	// custom 00:12:00
 	// duration interpolation formatting:
 	// no verb 16m39s
 	// epoch 999000000000
@@ -254,11 +254,11 @@ func Example_structure() {
 	files = logf.KV("files", "X")
 
 	// Attrs builds a slice of attrs, munging arguments
-	mulder := logf.Attrs(
+	mulder := []any{
 		files,
 		"title", "Special Agent",
 		"name", "Fox Mulder",
-	)
+	}
 
 	// Group <=> slog.Group
 	agent := logf.Group("agent", mulder...)
@@ -301,7 +301,7 @@ func ExampleWrapErr() {
 
 	// Output:
 	// the system is down	emails:{user:Strong Bad id:12345 err:the system is down}
-	// Strong Bad: the system is down	emails:{user:Strong Bad id:12345 err:Strong Bad: the system is down}
+	// Strong Bad: the system is down	emails:{user:Strong Bad id:12345 err:the system is down}
 	// the system is down
 	// Strong Bad: the system is down
 	// Strong Bad: the system is down

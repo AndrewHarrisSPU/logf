@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 const testTTYoutput = `   INFO    ok
@@ -15,7 +15,7 @@ const testTTYoutput = `   INFO    ok
    DEBUG   ok	l1:{}
    INFO    ok	l1:{a1:1}
    WARN    ok	l2:{a2:2}
-   ERROR   ok	l3:{a3:3}
+   ERROR   ok	l3:{a3:3 err:<nil>}
 `
 
 func TestTTY(t *testing.T) {
@@ -114,7 +114,7 @@ func TestTTYReplace(t *testing.T) {
 	log := New().
 		ReplaceFunc(func(scope []string, a Attr) Attr {
 			if a.Key == "secret" {
-				if a.Value.Kind() != slog.GroupKind {
+				if a.Value.Kind() != slog.KindGroup {
 					a.Value = slog.StringValue("redacted")
 				}
 			}
@@ -131,13 +131,13 @@ func TestTTYReplace(t *testing.T) {
 	log.Infof("{secret}", "secret", 2)
 	want(`redacted	secret:redacted secret:redacted`)
 
-	log.Infof("{group.secret}, {group.group2.secret}", Group("group", Attrs(
+	log.Infof("{group.secret}, {group.group2.secret}", Group("group", []any{
 		KV("secret", 3),
-		Group("group2", Attrs(
+		Group("group2", []any{
 			KV("secret", 4),
 			KV("secret", 5),
-		)...),
-	)...))
+		}...),
+	}...))
 	want(`redacted, redacted	secret:redacted group:{secret:redacted group2:{secret:redacted secret:redacted}}`)
 }
 
@@ -185,7 +185,7 @@ func TestTTYAux(t *testing.T) {
 		Writer(&b).
 		ReplaceFunc(func(scope []string, a Attr) Attr {
 			if a.Key == "time" {
-				a.Key = ""
+				return Attr{}
 			}
 			return a
 		})

@@ -5,12 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	// "fmt"
-
+	"log/slog"
+	"slices"
 	"strconv"
-
-	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 )
 
 type replaceFunc func([]string, Attr) Attr
@@ -22,7 +19,7 @@ func KV(key string, value any) Attr {
 }
 
 // See [slog.Group].
-func Group(name string, as ...Attr) Attr {
+func Group(name string, as ...any) Attr {
 	return slog.Group(name, as...)
 }
 
@@ -46,7 +43,7 @@ func expandValuerGroup(list *[]Attr, prefix string, v Value) {
 
 func expandValuer(list *[]Attr, prefix string, lv slog.LogValuer) {
 	v := lv.LogValue().Resolve()
-	if v.Kind() == slog.GroupKind {
+	if v.Kind() == slog.KindGroup {
 		expandValuerGroup(list, prefix+".", v)
 	} else {
 		*list = append(*list, slog.Any(prefix, v))
@@ -56,7 +53,7 @@ func expandValuer(list *[]Attr, prefix string, lv slog.LogValuer) {
 func expandHandler(list *[]Attr, prefix string, h slog.Handler) {
 	if lv, ok := h.(slog.LogValuer); ok {
 		group := lv.LogValue()
-		if group.Kind() == slog.GroupKind {
+		if group.Kind() == slog.KindGroup {
 			as := scopeAttrs(prefix, group.Group(), nil)
 			*list = append(*list, as...)
 		}
@@ -187,6 +184,15 @@ func (store Store) attrsDepth(depth int) []Attr {
 	return store.as[depth]
 }
 
+func (store Store) attrsDepthAny(depth int) []any {
+	as := store.attrsDepth(depth)
+	var list []any
+	for _, a := range as {
+		list = append(list, a)
+	}
+	return list
+}
+
 func (store Store) keyDepth(depth int) string {
 	if depth == 0 {
 		return ""
@@ -199,7 +205,7 @@ func (store Store) keyDepth(depth int) string {
 // iteratively using the result at depth as the tail for another frame call,
 // for a successively shallower/lower depth.
 func (store Store) frame(depth int, tail Attr) Attr {
-	emptyTail := tail == attrStoreEmptyTail
+	emptyTail := tail.Key == attrStoreEmptyTail.Key && tail.Value.Equal(attrStoreEmptyTail.Value)
 	emptyFrame := len(store.attrsDepth(depth)) == 0
 
 	if emptyTail && emptyFrame {
@@ -209,14 +215,15 @@ func (store Store) frame(depth int, tail Attr) Attr {
 	key := store.keyDepth(depth)
 
 	if emptyTail {
-		return slog.Group(key, store.attrsDepth(depth)...)
+		list := append([]any{}, store.attrsDepthAny(depth)...)
+		return slog.Group(key, list...)
 	}
 
 	if emptyFrame {
 		return slog.Group(key, tail)
 	}
 
-	return slog.Group(key, concatOne(store.attrsDepth(depth), tail)...)
+	return slog.Group(key, concatOne(store.attrsDepthAny(depth), any(tail))...)
 }
 
 // Attrs traverses attributes in the [Store], applying the given function to each visited attribute.

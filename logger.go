@@ -1,9 +1,7 @@
 package logf
 
 import (
-	"context"
-
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // Logger embeds a [slog.Logger], and offers additional formatting methods:
@@ -17,10 +15,7 @@ import (
 //   - [slog.Logger.Handler]
 //
 // The following methds are overriden to return [Logger]s rather than [*slog.Logger]s:
-//   - [slog.Logger.Ctx]
-//   - [slog.Logger.FromContext]
 //   - [slog.Logger.With]
-//   - [slog.Logger.WithContext]
 //   - [slog.Logger.WithGroup]
 type Logger struct {
 	*slog.Logger
@@ -42,19 +37,6 @@ func UsingHandler(h slog.Handler) Logger {
 	return newLogger(lh)
 }
 
-// Ctx returns FromContext(ctx).WithContext(ctx), with logf flavors.
-func Ctx(ctx context.Context) Logger {
-	return FromContext(ctx).WithContext(ctx)
-}
-
-// FromContext employs [slog.FromContext] to obtain a Logger from the given context.
-// Precisely, the function returns the result of:
-//
-//	UsingHandler(slog.FromContext(ctx).Handler())
-func FromContext(ctx context.Context) Logger {
-	return UsingHandler(slog.FromContext(ctx).Handler())
-}
-
 func newLogger(h handler) Logger {
 	return Logger{slog.New(h)}
 }
@@ -73,11 +55,9 @@ func (l Logger) WithGroup(name string) Logger {
 	}
 }
 
-// See [slog.Logger.WithContext]
-func (l Logger) WithContext(ctx context.Context) Logger {
-	return Logger{
-		l.Logger.WithContext(ctx),
-	}
+func (l Logger) Log(level slog.Level, msg string, args ...any) {
+	msg = logFmt(l, msg, args)
+	l.Logger.Log(nil, level, msg, args...)
 }
 
 // Debugf interpolates the msg string and logs at DEBUG.
@@ -98,10 +78,19 @@ func (l Logger) Warnf(msg string, args ...any) {
 	l.Warn(msg, args...)
 }
 
+// Error is log slog.Error, but specifically asks for an error.
+func (l Logger) Error(msg string, err error, args ...any) {
+	args = append(args, slog.Any("err", err))
+	l.Logger.Error(msg, args...)
+}
+
 // Errorf interpolates the msg string and logs at ERROR.
 func (l Logger) Errorf(msg string, err error, args ...any) {
+	args = append(args, slog.Any("err", err))
+	msg = logFmt(l, msg, args)
 	err = logFmtErr(l, msg, err, args)
-	l.Error("", err, args...)
+
+	l.Logger.Error(msg, args...)
 }
 
 // Fmt interpolates the f string and returns the result.

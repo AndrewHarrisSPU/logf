@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 func wantAllocs(t *testing.T, label string, want int, fn func()) {

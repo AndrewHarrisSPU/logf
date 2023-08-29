@@ -1,9 +1,8 @@
 package logf
 
 import (
+	"log/slog"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 type (
@@ -18,10 +17,10 @@ type (
 )
 
 const (
-	DEBUG = slog.DebugLevel
-	INFO  = slog.InfoLevel
-	WARN  = slog.WarnLevel
-	ERROR = slog.ErrorLevel
+	DEBUG = slog.LevelDebug
+	INFO  = slog.LevelInfo
+	WARN  = slog.LevelWarn
+	ERROR = slog.LevelError
 )
 
 // Below is copy-pasta from Go library code.

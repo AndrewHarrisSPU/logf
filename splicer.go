@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 const (
@@ -140,7 +140,7 @@ func (s *splicer) matchLocal(stack []string, a Attr, replace replaceFunc) {
 		s.dict[a.Key] = a.Value
 	}
 
-	if a.Value.Kind() == slog.GroupKind {
+	if a.Value.Kind() == slog.KindGroup {
 		stack = append(stack, a.Key)
 
 		for _, a := range a.Value.Group() {
@@ -166,7 +166,7 @@ func (s *splicer) match(stack []string, a Attr, replace replaceFunc) {
 		s.dict[key] = a.Value
 	}
 
-	if a.Value.Kind() == slog.GroupKind {
+	if a.Value.Kind() == slog.KindGroup {
 		stack = append(stack, a.Key)
 
 		for _, a := range a.Value.Group() {
@@ -208,25 +208,25 @@ func (s *splicer) WriteValue(v slog.Value, verb []byte) {
 
 func (s *splicer) writeValueNoVerb(v slog.Value) {
 	switch v.Kind() {
-	case slog.StringKind:
+	case slog.KindString:
 		s.WriteString(v.String())
-	case slog.BoolKind:
+	case slog.KindBool:
 		s.text = strconv.AppendBool(s.text, v.Bool())
-	case slog.Float64Kind:
+	case slog.KindFloat64:
 		s.text = strconv.AppendFloat(s.text, v.Float64(), 'g', -1, 64)
-	case slog.Int64Kind:
+	case slog.KindInt64:
 		s.text = strconv.AppendInt(s.text, v.Int64(), 10)
-	case slog.Uint64Kind:
+	case slog.KindUint64:
 		s.text = strconv.AppendUint(s.text, v.Uint64(), 10)
-	case slog.DurationKind:
+	case slog.KindDuration:
 		s.text = appendDuration(s.text, v.Duration())
-	case slog.TimeKind:
+	case slog.KindTime:
 		s.text = appendTimeRFC3339Millis(s.text, v.Time())
-	case slog.GroupKind:
+	case slog.KindGroup:
 		s.writeGroup(v.Group())
-	case slog.LogValuerKind:
+	case slog.KindLogValuer:
 		s.writeValueNoVerb(v.Resolve())
-	case slog.AnyKind:
+	case slog.KindAny:
 		fmt.Fprintf(s, "%v", v.Any())
 	default:
 		panic(corruptKind)
@@ -235,25 +235,25 @@ func (s *splicer) writeValueNoVerb(v slog.Value) {
 
 func (s *splicer) writeValueVerb(v slog.Value, verb string) {
 	switch v.Kind() {
-	case slog.StringKind:
+	case slog.KindString:
 		fmt.Fprintf(s, verb, v.String())
-	case slog.BoolKind:
+	case slog.KindBool:
 		fmt.Fprintf(s, verb, v.Bool())
-	case slog.Float64Kind:
+	case slog.KindFloat64:
 		fmt.Fprintf(s, verb, v.Float64())
-	case slog.Int64Kind:
+	case slog.KindInt64:
 		fmt.Fprintf(s, verb, v.Int64())
-	case slog.Uint64Kind:
+	case slog.KindUint64:
 		fmt.Fprintf(s, verb, v.Uint64())
-	case slog.DurationKind:
+	case slog.KindDuration:
 		s.writeDurationVerb(v.Duration(), verb)
-	case slog.TimeKind:
+	case slog.KindTime:
 		s.writeTimeVerb(v.Time(), verb)
-	case slog.GroupKind:
+	case slog.KindGroup:
 		s.writeGroup(v.Group())
-	case slog.LogValuerKind:
+	case slog.KindLogValuer:
 		s.writeValueVerb(v.Resolve(), verb)
-	case slog.AnyKind:
+	case slog.KindAny:
 		fmt.Fprintf(s, verb, v.Any())
 	default:
 		panic(corruptKind)

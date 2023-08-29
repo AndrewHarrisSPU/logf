@@ -1,11 +1,13 @@
 package logf
 
 import (
+	"context"
 	"io"
 	"os"
+	"runtime"
 	"sync"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // TTY HANDLER
@@ -144,7 +146,7 @@ func (tty *TTY) Filter(tags ...string) {
 // HANDLER
 
 // Enabled reports whether the [TTY] is enabled for logging at the given level.
-func (tty *TTY) Enabled(level slog.Level) bool {
+func (tty *TTY) Enabled(ctx context.Context, level slog.Level) bool {
 	return level >= tty.dev.ref.Level()
 }
 
@@ -227,9 +229,9 @@ func (tty *TTY) WithGroup(name string) slog.Handler {
 }
 
 // Handle logs the given [slog.Record] to [TTY] output.
-func (tty *TTY) Handle(r slog.Record) (auxErr error) {
+func (tty *TTY) Handle(ctx context.Context, r slog.Record) (auxErr error) {
 	if tty.aux != nil {
-		auxErr = tty.aux.Handle(r)
+		auxErr = tty.aux.Handle(ctx, r)
 	}
 
 	if tty.dev.w == nil {
@@ -245,10 +247,10 @@ func (tty *TTY) Handle(r slog.Record) (auxErr error) {
 	s.joinStore(tty.store, tty.dev.replace)
 
 	var recordErr error
-	r.Attrs(func(a Attr) {
+	r.Attrs(func(a Attr) bool {
 		if a.Key == "#" {
 			_, enabled = tty.dev.filter.tag[a.Value.String()]
-			return
+			return true
 		}
 		if a.Key == "err" {
 			if curr, isErr := a.Value.Any().(error); isErr {
@@ -256,16 +258,26 @@ func (tty *TTY) Handle(r slog.Record) (auxErr error) {
 			}
 		}
 		s.joinLocal(tty.store.scope, a, tty.dev.replace)
+		return true
 	})
 
 	if len(tty.dev.filter.tag) > 0 && !enabled {
 		return nil
 	}
 
-	file, line := r.SourceLine()
-	tty.encFields(s, r.Level, r.Message, recordErr, SourceLine{file, line})
+	tty.encFields(s, r.Level, r.Message, recordErr, source(r))
 
 	tty.dev.w.Write(s.text)
 
 	return nil
+}
+
+func source(r slog.Record) *slog.Source {
+	fs := runtime.CallersFrames([]uintptr{r.PC})
+	f, _ := fs.Next()
+	return &slog.Source{
+		Function: f.Function,
+		File:     f.File,
+		Line:     f.Line,
+	}
 }

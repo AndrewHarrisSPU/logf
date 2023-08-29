@@ -2,11 +2,10 @@ package logf
 
 import (
 	"io"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/slog"
 )
 
 // StdRef is a global [slog.LevelVar] used in default-ish configurations.
@@ -203,11 +202,11 @@ func (cfg *Config) ShowGroup(color string, open Encoder[int], close Encoder[int]
 // ShowSource sets a color and an encoder for [SourceLine] encoding.
 // If the enc argument is nil, the configuration uses the [SourceAbs] function.
 // Configurations must set [Config.AddSource] to output source annotations.
-func (cfg *Config) ShowSource(color string, enc Encoder[SourceLine]) *Config {
+func (cfg *Config) ShowSource(color string, enc Encoder[*slog.Source]) *Config {
 	if enc == nil {
 		enc = EncodeFunc(encSourceAbs)
 	}
-	cfg.fmtr.source = ttyEncoder[SourceLine]{newPen(color), enc}
+	cfg.fmtr.source = ttyEncoder[*slog.Source]{newPen(color), enc}
 	return cfg
 }
 
@@ -372,11 +371,11 @@ func (cfg *Config) TTY() *TTY {
 			}
 
 			// build a JSON handler
-			enc := slog.HandlerOptions{
+			enc := slog.NewJSONHandler(w, &slog.HandlerOptions{
 				Level:       cfg.ref,
 				AddSource:   cfg.fmtr.addSource,
 				ReplaceAttr: cfg.replace,
-			}.NewJSONHandler(w)
+			})
 
 			h := &Handler{
 				enc:       enc,
@@ -417,11 +416,11 @@ func (cfg *Config) Printer() Logger {
 //
 // Only [Config.Writer], [Config.Level], [Config.AddSource], and [Config.ReplaceFunc] configuration is applied.
 func (cfg *Config) JSON() Logger {
-	enc := slog.HandlerOptions{
+	enc := slog.NewJSONHandler(cfg.w.Writer, &slog.HandlerOptions{
 		Level:       cfg.ref,
 		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
-	}.NewJSONHandler(cfg.w.Writer)
+	})
 
 	h := &Handler{
 		enc:       enc,
@@ -441,11 +440,11 @@ func (cfg *Config) JSON() Logger {
 //
 // Only [Config.Writer], [Config.Level], [Config.AddSource], and [Config.ReplaceFunc] configuration is applied.
 func (cfg *Config) Text() Logger {
-	enc := slog.HandlerOptions{
+	enc := slog.NewTextHandler(cfg.w.Writer, &slog.HandlerOptions{
 		Level:       cfg.ref,
 		AddSource:   cfg.fmtr.addSource,
 		ReplaceAttr: cfg.replace,
-	}.NewTextHandler(cfg.w.Writer)
+	})
 
 	h := &Handler{
 		enc:       enc,
