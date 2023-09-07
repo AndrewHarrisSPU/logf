@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 	// "github.com/AndrewHarrisSPU/logf"
 )
 

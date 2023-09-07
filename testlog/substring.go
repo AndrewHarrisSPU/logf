@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"golang.org/x/exp/slog"
+	"log/slog"
 )
 
 // Substrings returns a [slog.Handler] and a "want" function.
